@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -31,6 +34,9 @@ public class Order {
 
     @Version
     private long version;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderItem> items = new ArrayList<>();
 
 
     protected Order(){
@@ -69,6 +75,16 @@ public class Order {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public List<OrderItem> getItems() {
+        return Collections.unmodifiableList(items);
+    }
+
+    public void addItem(UUID productId, int quantity, BigDecimal unitPrice){
+        OrderItem item = new OrderItem(this, productId, quantity, unitPrice);
+        items.add(item);
+        totalAmount = totalAmount.add(item.subtotal());
     }
 
 }
