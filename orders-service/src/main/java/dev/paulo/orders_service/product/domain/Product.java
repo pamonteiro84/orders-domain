@@ -1,4 +1,4 @@
-package dev.paulo.orders_service.product;
+package dev.paulo.orders_service.product.domain;
 
 import jakarta.persistence.*;
 

@@ -1,4 +1,4 @@
-package dev.paulo.orders_service.order;
+package dev.paulo.orders_service.order.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
