@@ -1,4 +1,4 @@
-name: CI
+name: Build and Test
 
 on:
   push:
@@ -19,4 +19,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew build
+      - name: Build
+        run: ./gradlew assemble
+
+      - name: Lint & format
+        run: ./gradlew spotlessCheck checkstyleMain checkstyleTest
+
+      - name: Test
+        run: ./gradlew test

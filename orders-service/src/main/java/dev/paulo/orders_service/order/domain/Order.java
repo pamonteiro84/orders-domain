@@ -1,7 +1,14 @@
 package dev.paulo.orders_service.order.domain;
 
-import jakarta.persistence.*;
-
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,7 +19,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "orders")
 public class Order {
-    
+
     @Id
     private UUID id;
 
@@ -38,13 +45,9 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
+    protected Order() {}
 
-    protected Order(){
-
-    }
-
-
-    public Order(UUID customerId){
+    public Order(UUID customerId) {
         this.id = UUID.randomUUID();
         this.customerId = customerId;
         this.status = OrderStatus.PENDING;
@@ -53,7 +56,7 @@ public class Order {
         this.updatedAt = this.createdAt;
     }
 
-    public UUID getId(){
+    public UUID getId() {
         return id;
     }
 
@@ -65,7 +68,7 @@ public class Order {
         return status;
     }
 
-     public BigDecimal getTotalAmount() {
+    public BigDecimal getTotalAmount() {
         return totalAmount;
     }
 
@@ -81,10 +84,9 @@ public class Order {
         return Collections.unmodifiableList(items);
     }
 
-    public void addItem(UUID productId, int quantity, BigDecimal unitPrice){
+    public void addItem(UUID productId, int quantity, BigDecimal unitPrice) {
         OrderItem item = new OrderItem(this, productId, quantity, unitPrice);
         items.add(item);
         totalAmount = totalAmount.add(item.subtotal());
     }
-
 }

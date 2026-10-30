@@ -7,7 +7,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -31,8 +30,7 @@ public class OrderItem {
     @Column(name = "unit_price", nullable = false, precision = 19, scale = 2)
     private BigDecimal unitPrice;
 
-    protected OrderItem() {
-    }
+    protected OrderItem() {}
 
     OrderItem(Order order, UUID productId, int quantity, BigDecimal unitPrice) {
         this.id = UUID.randomUUID();
