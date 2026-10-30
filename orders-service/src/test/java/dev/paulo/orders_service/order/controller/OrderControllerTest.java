@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.paulo.orders_service.TestcontainersConfiguration;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -116,5 +117,56 @@ class OrderControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Order not found"))
                 .andExpect(jsonPath("$.orderId").value(unknown));
+    }
+
+    @Test
+    void listOrders_returnsCustomerOrdersNewestFirstWithPageMetadata() throws Exception {
+        String customer = UUID.randomUUID().toString();
+        String first = createOrderFor(customer);
+        createOrderFor(customer);
+        String last = createOrderFor(customer);
+        createOrderFor(UUID.randomUUID().toString()); // outro cliente: não deve aparecer
+
+        mockMvc.perform(get("/orders").param("customerId", customer).param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[0].id").value(last))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        mockMvc.perform(get("/orders")
+                        .param("customerId", customer)
+                        .param("page", "1")
+                        .param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].id").value(first));
+    }
+
+    @Test
+    void listOrders_forCustomerWithoutOrders_returnsEmptyPage() throws Exception {
+        mockMvc.perform(get("/orders").param("customerId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void listOrders_withoutCustomerId_returns400() throws Exception {
+        mockMvc.perform(get("/orders")).andExpect(status().isBadRequest());
+    }
+
+    private String createOrderFor(String customerId) throws Exception {
+        String body = """
+                { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 1 } ] }
+                """.formatted(customerId, ADAGIO);
+
+        String location = mockMvc.perform(
+                        post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getHeader("Location");
+        return location.substring("/orders/".length());
     }
 }

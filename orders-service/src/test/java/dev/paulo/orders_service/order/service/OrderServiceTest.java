@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,9 +24,12 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -86,5 +90,32 @@ class OrderServiceTest {
         when(orders.findWithItemsById(unknown)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(unknown)).isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
+    void list_capsPageSizeAt100AndSortsByNewest() {
+        UUID customer = UUID.randomUUID();
+        when(orders.findByCustomerId(eq(customer), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.list(customer, 0, 500);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(orders).findByCustomerId(eq(customer), captor.capture());
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(captor.getValue().getSort().getOrderFor("createdAt").isDescending())
+                .isTrue();
+    }
+
+    @Test
+    void list_withNegativePageOrZeroSize_usesSafeDefaults() {
+        UUID customer = UUID.randomUUID();
+        when(orders.findByCustomerId(eq(customer), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.list(customer, -3, 0);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(orders).findByCustomerId(eq(customer), captor.capture());
+        assertThat(captor.getValue().getPageNumber()).isZero();
+        assertThat(captor.getValue().getPageSize()).isEqualTo(1);
     }
 }
