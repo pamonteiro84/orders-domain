@@ -156,6 +156,39 @@ class OrderControllerTest {
         mockMvc.perform(get("/orders")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void cancelOrder_pending_returns200WithCancelledStatus() throws Exception {
+        String id = createOrderFor(CUSTOMER);
+
+        mockMvc.perform(post("/orders/" + id + "/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mockMvc.perform(get("/orders/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void cancelOrder_alreadyCancelled_returns409() throws Exception {
+        String id = createOrderFor(CUSTOMER);
+        mockMvc.perform(post("/orders/" + id + "/cancel")).andExpect(status().isOk());
+
+        mockMvc.perform(post("/orders/" + id + "/cancel"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.orderId").value(id));
+    }
+
+    @Test
+    void cancelOrder_withUnknownId_returns404() throws Exception {
+        String unknown = "00000000-0000-0000-0000-000000000999";
+
+        mockMvc.perform(post("/orders/" + unknown + "/cancel"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.orderId").value(unknown));
+    }
+
     private String createOrderFor(String customerId) throws Exception {
         String body = """
                 { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 1 } ] }

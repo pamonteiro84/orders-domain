@@ -66,4 +66,11 @@ public class OrderService {
                 Math.max(page, 0), Math.clamp(size, 1, MAX_PAGE_SIZE), Sort.by(Sort.Direction.DESC, "createdAt"));
         return PageResponse.from(orders.findByCustomerId(customerId, pageable).map(OrderSummaryResponse::from));
     }
+
+    @Transactional
+    public OrderResponse cancel(UUID id) {
+        Order order = orders.findWithItemsById(id).orElseThrow(() -> new OrderNotFoundException(id));
+        order.cancel();
+        return OrderResponse.from(order);
+    }
 }

@@ -46,4 +46,9 @@ public class OrderController {
             @RequestParam(defaultValue = "20") int size) {
         return orderService.list(customerId, page, size);
     }
+
+    @PostMapping("/{id}/cancel")
+    public OrderResponse cancel(@PathVariable UUID id) {
+        return orderService.cancel(id);
+    }
 }

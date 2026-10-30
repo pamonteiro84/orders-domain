@@ -1,5 +1,6 @@
 package dev.paulo.orders_service.order.domain;
 
+import dev.paulo.orders_service.order.exception.InvalidOrderTransitionException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -88,5 +89,14 @@ public class Order {
         OrderItem item = new OrderItem(this, productId, quantity, unitPrice);
         items.add(item);
         totalAmount = totalAmount.add(item.subtotal());
+    }
+
+    public void cancel() {
+
+        if (this.status != OrderStatus.PENDING) {
+            throw new InvalidOrderTransitionException(this.id, this.status);
+        }
+        this.status = OrderStatus.CANCELLED;
+        this.updatedAt = Instant.now();
     }
 }

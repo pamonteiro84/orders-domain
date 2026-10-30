@@ -1,7 +1,9 @@
 package dev.paulo.orders_service.order.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.paulo.orders_service.order.exception.InvalidOrderTransitionException;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -26,5 +28,23 @@ class OrderTest {
 
         assertThat(order.getItems()).hasSize(2);
         assertThat(order.getTotalAmount()).isEqualByComparingTo("119.88");
+    }
+
+    @Test
+    void cancel_pendingOrder_becomesCancelled() {
+        Order order = new Order(UUID.randomUUID());
+
+        order.cancel();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_alreadyCancelled_throws() {
+        Order order = new Order(UUID.randomUUID());
+        order.cancel();
+
+        assertThatThrownBy(() -> order.cancel()).isInstanceOf(InvalidOrderTransitionException.class);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 }
