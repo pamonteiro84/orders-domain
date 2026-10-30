@@ -1,7 +1,13 @@
 package dev.paulo.orders_service.order.repository;
 
 import dev.paulo.orders_service.order.domain.Order;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface OrderRepository extends JpaRepository<Order, UUID> {}
+public interface OrderRepository extends JpaRepository<Order, UUID> {
+
+    @EntityGraph(attributePaths = "items")
+    Optional<Order> findWithItemsById(UUID id);
+}

@@ -3,6 +3,7 @@ package dev.paulo.orders_service.order.service;
 import dev.paulo.orders_service.order.domain.Order;
 import dev.paulo.orders_service.order.dto.CreateOrderRequest;
 import dev.paulo.orders_service.order.dto.OrderResponse;
+import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
 import dev.paulo.orders_service.order.repository.OrderRepository;
 import dev.paulo.orders_service.product.domain.Product;
@@ -45,5 +46,10 @@ public class OrderService {
         }
 
         return OrderResponse.from(orders.save(order));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse get(UUID id) {
+        return orders.findWithItemsById(id).map(OrderResponse::from).orElseThrow(() -> new OrderNotFoundException(id));
     }
 }

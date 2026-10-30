@@ -12,12 +12,14 @@ import static org.mockito.Mockito.when;
 import dev.paulo.orders_service.order.domain.Order;
 import dev.paulo.orders_service.order.dto.CreateOrderRequest;
 import dev.paulo.orders_service.order.dto.OrderResponse;
+import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
 import dev.paulo.orders_service.order.repository.OrderRepository;
 import dev.paulo.orders_service.product.domain.Product;
 import dev.paulo.orders_service.product.repository.ProductRepository;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,5 +65,26 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> service.create(request)).isInstanceOf(ProductNotFoundException.class);
         verify(orders, never()).save(any());
+    }
+
+    @Test
+    void get_returnsOrderWithItems() {
+        Order order = new Order(UUID.randomUUID());
+        order.addItem(UUID.randomUUID(), 2, new BigDecimal("39.99"));
+        when(orders.findWithItemsById(order.getId())).thenReturn(Optional.of(order));
+
+        OrderResponse response = service.get(order.getId());
+
+        assertThat(response.id()).isEqualTo(order.getId());
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.totalAmount()).isEqualByComparingTo("79.98");
+    }
+
+    @Test
+    void get_withUnknownId_throwsOrderNotFound() {
+        UUID unknown = UUID.randomUUID();
+        when(orders.findWithItemsById(unknown)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.get(unknown)).isInstanceOf(OrderNotFoundException.class);
     }
 }

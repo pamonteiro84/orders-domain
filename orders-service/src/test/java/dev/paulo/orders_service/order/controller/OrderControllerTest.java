@@ -2,6 +2,7 @@ package dev.paulo.orders_service.order.controller;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -79,5 +80,41 @@ class OrderControllerTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.title").value("Product not found"))
                 .andExpect(jsonPath("$.productId").value(unknown));
+    }
+
+    @Test
+    void getOrder_returns200WithItemsAndTotal() throws Exception {
+        String body = """
+                {
+                  "customerId": "%s",
+                  "items": [
+                    { "productId": "%s", "quantity": 2 },
+                    { "productId": "%s", "quantity": 1 }
+                  ]
+                }
+                """.formatted(CUSTOMER, ADAGIO, FRAPPE);
+
+        String location = mockMvc.perform(
+                        post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getHeader("Location");
+
+        mockMvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.totalAmount").value(119.88))
+                .andExpect(jsonPath("$.items", hasSize(2)));
+    }
+
+    @Test
+    void getOrder_withUnknownId_returns404() throws Exception {
+        String unknown = "00000000-0000-0000-0000-000000000999";
+
+        mockMvc.perform(get("/orders/" + unknown))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Order not found"))
+                .andExpect(jsonPath("$.orderId").value(unknown));
     }
 }
