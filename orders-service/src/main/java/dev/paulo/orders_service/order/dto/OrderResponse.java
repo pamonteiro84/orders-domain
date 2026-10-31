@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public record OrderResponse(
         UUID id, UUID customerId, OrderStatus status, BigDecimal totalAmount, Instant createdAt, List<Item> items) {
+
     public record Item(UUID productId, int quantity, BigDecimal unitPrice) {
 
         static Item from(OrderItem item) {

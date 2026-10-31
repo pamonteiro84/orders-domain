@@ -5,19 +5,19 @@ import java.util.UUID;
 
 public class InvalidOrderTransitionException extends RuntimeException {
     private final UUID orderId;
-    private final OrderStatus status;
+    private final OrderStatus currentStatus;
 
-    public InvalidOrderTransitionException(UUID orderId, OrderStatus status) {
-        super("Cannot cancel order: " + orderId + " in status " + status);
+    public InvalidOrderTransitionException(UUID orderId, OrderStatus currentStatus) {
+        super("Cannot cancel order " + orderId + " in status " + currentStatus);
         this.orderId = orderId;
-        this.status = status;
+        this.currentStatus = currentStatus;
     }
 
     public UUID getOrderId() {
         return orderId;
     }
 
-    public OrderStatus getOrderStatus() {
-        return status;
+    public OrderStatus getCurrentStatus() {
+        return currentStatus;
     }
 }

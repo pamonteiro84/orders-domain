@@ -57,7 +57,9 @@ class OrderControllerTest {
                 """.formatted(CUSTOMER, ADAGIO);
 
         mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid request"))
+                .andExpect(jsonPath("$.errors[0].field").value("items[0].quantity"));
     }
 
     @Test
@@ -177,7 +179,8 @@ class OrderControllerTest {
 
         mockMvc.perform(post("/orders/" + id + "/cancel"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.orderId").value(id));
+                .andExpect(jsonPath("$.orderId").value(id))
+                .andExpect(jsonPath("$.currentStatus").value("CANCELLED"));
     }
 
     @Test
