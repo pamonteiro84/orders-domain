@@ -1,5 +1,6 @@
 HELP.md
 CLAUDE.local.md
+.claude/settings.local.json
 plan.md
 .gradle
 build/
