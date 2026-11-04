@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,12 +37,12 @@ class AuthServiceTest {
     @Test
     void register_savesPasswordHashAndNormalizedEmail() {
         when(passwordEncoder.encode("segredo123")).thenReturn("hash");
-        when(users.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(users.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UserResponse response = service.register(new RegisterUserRequest("Ana@x.pt", "segredo123"));
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(users).save(saved.capture());
+        verify(users).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("hash");
         assertThat(response.email()).isEqualTo("ana@x.pt");
     }
@@ -53,6 +54,15 @@ class AuthServiceTest {
         assertThatThrownBy(() -> service.register(new RegisterUserRequest("Ana@x.pt", "segredo123")))
                 .isInstanceOf(UserAlreadyExistsException.class);
 
-        verify(users, never()).save(any());
+        verify(users, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void register_whenDatabaseRejectsDuplicate_throwsUserAlreadyExists() {
+        when(passwordEncoder.encode("segredo123")).thenReturn("hash");
+        when(users.saveAndFlush(any(User.class))).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        assertThatThrownBy(() -> service.register(new RegisterUserRequest("Ana@x.pt", "segredo123")))
+                .isInstanceOf(UserAlreadyExistsException.class);
     }
 }

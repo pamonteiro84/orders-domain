@@ -50,6 +50,17 @@ Health check: `curl localhost:8080/actuator/health`
 The database is seeded with six products; the examples use `adagio` (`...0001`, 39.99) and
 `frappe` (`...0004`, 39.90).
 
+### Register a user
+
+```bash
+curl -X POST localhost:8080/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{ "email": "ana@example.com", "password": "change-me-123" }'
+```
+
+`201 Created` with `id`, `email` and `createdAt`. The email is stored in lowercase and the password
+as a BCrypt hash, never returned. An email already registered returns `409`.
+
 ### List products
 
 ```bash
@@ -110,7 +121,7 @@ and `instance`, plus the data needed to act on it:
 |--------|----------------------------------------------------------------------|
 | 400    | Invalid body or parameters; validation errors include an `errors` list of `field` and `message` |
 | 404    | Order not found (`orderId`)                                          |
-| 409    | Order cannot be cancelled in its current status, or was modified concurrently |
+| 409    | Order cannot be cancelled in its current status, or was modified concurrently; email already registered |
 | 422    | The order references a product that does not exist (`productId`)     |
 | 500    | Unexpected error; details are logged, never returned                 |
 

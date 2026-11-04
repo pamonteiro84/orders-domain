@@ -5,6 +5,7 @@ import dev.paulo.orders_service.user.dto.RegisterUserRequest;
 import dev.paulo.orders_service.user.dto.UserResponse;
 import dev.paulo.orders_service.user.exception.UserAlreadyExistsException;
 import dev.paulo.orders_service.user.repository.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,12 @@ public class AuthService {
 
         String encodedPassword = passwordEncoder.encode(userRequest.password());
 
-        User newUser = users.save(new User(normalizedEmail, encodedPassword));
+        User newUser;
+        try {
+            newUser = users.saveAndFlush(new User(normalizedEmail, encodedPassword));
+        } catch (DataIntegrityViolationException ex) {
+            throw new UserAlreadyExistsException(normalizedEmail);
+        }
 
         return UserResponse.from(newUser);
     }
