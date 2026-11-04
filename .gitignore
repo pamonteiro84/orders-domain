@@ -1,6 +1,7 @@
 HELP.md
 CLAUDE.local.md
 .claude/settings.local.json
+.claude/skills/update-decisoes/
 plan.md
 .gradle
 build/
@@ -8,6 +9,7 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 decisoes.md
+explicacoes/
 
 ### STS ###
 .apt_generated
