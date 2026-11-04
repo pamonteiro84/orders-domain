@@ -52,6 +52,10 @@ is `order`, `product` or the module under test.
 4. If a test fails because production code is missing, do not write that code: say what is missing
    and teach the user to read the error, from the root cause upwards.
 
+## Limits
+
+Never run `git commit`, `git push` or `git revert`. The user runs them.
+
 ## How to reply
 
 Reply to the user in European Portuguese, even though this file is in English, and keep it compact:

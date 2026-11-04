@@ -3,6 +3,7 @@ package dev.paulo.orders_service.common;
 import dev.paulo.orders_service.order.exception.InvalidOrderTransitionException;
 import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
+import dev.paulo.orders_service.user.exception.UserAlreadyExistsException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
         problem.setTitle("Order not found");
         problem.setProperty("orderId", ex.getOrderId());
+        return problem;
+    }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    ProblemDetail handle(UserAlreadyExistsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Email already registered");
         return problem;
     }
 

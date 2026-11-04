@@ -37,7 +37,7 @@ Confirm whether the working tree is ready to commit. Follow the steps in order, 
 
 ## Limits
 
-- Do not run `git add`, `git commit` or `git push`: only propose the commands.
+- Never run `git add`, `git commit`, `git push` or `git revert`: only propose the commands.
 - Do not fix the code: point out what is wrong. Fix it only if the user asks.
 - Do not run `make format`, because it changes files. If lint fails on formatting, suggest the
   command.

@@ -10,6 +10,7 @@ build/
 !**/src/test/**/build/
 decisoes.md
 explicacoes/
+test.log
 
 ### STS ###
 .apt_generated
