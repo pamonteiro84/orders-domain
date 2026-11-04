@@ -5,8 +5,6 @@ import dev.paulo.orders_service.user.dto.RegisterUserRequest;
 import dev.paulo.orders_service.user.dto.UserResponse;
 import dev.paulo.orders_service.user.exception.UserAlreadyExistsException;
 import dev.paulo.orders_service.user.repository.UserRepository;
-import java.time.Instant;
-import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +31,7 @@ public class AuthService {
 
         String encodedPassword = passwordEncoder.encode(userRequest.password());
 
-        UUID userId = UUID.randomUUID();
-
-        Instant createdAt = Instant.now();
-
-        User newUser = new User(userRequest.email(), encodedPassword);
-
-        users.save(newUser);
+        User newUser = users.save(new User(normalizedEmail, encodedPassword));
 
         return UserResponse.from(newUser);
     }
