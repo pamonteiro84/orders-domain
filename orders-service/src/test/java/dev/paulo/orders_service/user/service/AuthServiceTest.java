@@ -7,9 +7,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.paulo.orders_service.security.TokenService;
 import dev.paulo.orders_service.user.domain.User;
+import dev.paulo.orders_service.user.dto.LoginRequest;
 import dev.paulo.orders_service.user.dto.RegisterUserRequest;
+import dev.paulo.orders_service.user.dto.TokenResponse;
 import dev.paulo.orders_service.user.dto.UserResponse;
+import dev.paulo.orders_service.user.exception.InvalidCredentialsException;
 import dev.paulo.orders_service.user.exception.UserAlreadyExistsException;
 import dev.paulo.orders_service.user.repository.UserRepository;
 import java.util.Optional;
@@ -30,6 +34,9 @@ class AuthServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private TokenService tokens;
 
     @InjectMocks
     private AuthService service;
@@ -64,5 +71,38 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> service.register(new RegisterUserRequest("Ana@x.pt", "segredo123")))
                 .isInstanceOf(UserAlreadyExistsException.class);
+    }
+
+    @Test
+    void login_withValidCredentials_returnsTokenIssuedForThatUser() {
+        User ana = new User("ana@x.pt", "hash");
+        when(users.findByEmail("ana@x.pt")).thenReturn(Optional.of(ana));
+        when(passwordEncoder.matches("segredo123", "hash")).thenReturn(true);
+        when(tokens.issue(ana)).thenReturn("token-da-ana");
+
+        TokenResponse response = service.login(new LoginRequest("Ana@x.pt", "segredo123"));
+
+        assertThat(response.accessToken()).isEqualTo("token-da-ana");
+    }
+
+    @Test
+    void login_withUnknownEmail_throwsAndDoesNotIssueToken() {
+        when(users.findByEmail("ana@x.pt")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("ana@x.pt", "segredo123")))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        verify(tokens, never()).issue(any());
+    }
+
+    @Test
+    void login_withWrongPassword_throwsAndDoesNotIssueToken() {
+        when(users.findByEmail("ana@x.pt")).thenReturn(Optional.of(new User("ana@x.pt", "hash")));
+        when(passwordEncoder.matches("errada", "hash")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("ana@x.pt", "errada")))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        verify(tokens, never()).issue(any());
     }
 }

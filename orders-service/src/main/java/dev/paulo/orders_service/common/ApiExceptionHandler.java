@@ -3,6 +3,7 @@ package dev.paulo.orders_service.common;
 import dev.paulo.orders_service.order.exception.InvalidOrderTransitionException;
 import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
+import dev.paulo.orders_service.user.exception.InvalidCredentialsException;
 import dev.paulo.orders_service.user.exception.UserAlreadyExistsException;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -44,6 +45,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handle(UserAlreadyExistsException ex) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         problem.setTitle("Email already registered");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ProblemDetail handle(InvalidCredentialsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
+        problem.setTitle("Invalid email or password");
         return problem;
     }
 

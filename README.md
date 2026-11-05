@@ -61,6 +61,17 @@ curl -X POST localhost:8080/auth/register \
 `201 Created` with `id`, `email` and `createdAt`. The email is stored in lowercase and the password
 as a BCrypt hash, never returned. An email already registered returns `409`.
 
+### Log in
+
+```bash
+curl -X POST localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{ "email": "ana@example.com", "password": "change-me-123" }'
+```
+
+`200 OK` with an `accessToken` (JWT signed with RS256, valid for 15 minutes). A wrong password or an
+unknown email both return the same `401`.
+
 ### List products
 
 ```bash
@@ -120,6 +131,7 @@ and `instance`, plus the data needed to act on it:
 | Status | When                                                                 |
 |--------|----------------------------------------------------------------------|
 | 400    | Invalid body or parameters; validation errors include an `errors` list of `field` and `message` |
+| 401    | Invalid email or password                                            |
 | 404    | Order not found (`orderId`)                                          |
 | 409    | Order cannot be cancelled in its current status, or was modified concurrently; email already registered |
 | 422    | The order references a product that does not exist (`productId`)     |

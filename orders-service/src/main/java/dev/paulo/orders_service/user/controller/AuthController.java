@@ -1,6 +1,8 @@
 package dev.paulo.orders_service.user.controller;
 
+import dev.paulo.orders_service.user.dto.LoginRequest;
 import dev.paulo.orders_service.user.dto.RegisterUserRequest;
+import dev.paulo.orders_service.user.dto.TokenResponse;
 import dev.paulo.orders_service.user.dto.UserResponse;
 import dev.paulo.orders_service.user.service.AuthService;
 import jakarta.validation.Valid;
@@ -25,5 +27,10 @@ public class AuthController {
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterUserRequest userRequest) {
         UserResponse response = auth.register(userRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/login")
+    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
+        return auth.login(request);
     }
 }
