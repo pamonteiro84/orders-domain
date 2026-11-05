@@ -13,6 +13,11 @@ spring:
     properties:
       hibernate.format_sql: true
 
+jwt:
+  private-key: ${JWT_PRIVATE_KEY}
+  public-key: ${JWT_PUBLIC_KEY}
+  expiration: 15m
+
 logging:
   level:
     "[org.hibernate.SQL]": debug
