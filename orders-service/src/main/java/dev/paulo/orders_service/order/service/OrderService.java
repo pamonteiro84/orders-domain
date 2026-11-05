@@ -34,7 +34,7 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse create(CreateOrderRequest request) {
+    public OrderResponse create(UUID customerId, CreateOrderRequest request) {
 
         var productIds =
                 request.items().stream().map(CreateOrderRequest.Item::productId).collect(Collectors.toSet());
@@ -42,7 +42,7 @@ public class OrderService {
         Map<UUID, Product> productsById = products.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
 
-        Order order = new Order(request.customerId());
+        Order order = new Order(customerId);
 
         for (var item : request.items()) {
             Product product = productsById.get(item.productId());
@@ -56,8 +56,10 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse get(UUID id) {
-        return orders.findWithItemsById(id).map(OrderResponse::from).orElseThrow(() -> new OrderNotFoundException(id));
+    public OrderResponse get(UUID customerId, UUID id) {
+        return orders.findWithItemsByIdAndCustomerId(id, customerId)
+                .map(OrderResponse::from)
+                .orElseThrow(() -> new OrderNotFoundException(id));
     }
 
     @Transactional(readOnly = true)
@@ -68,8 +70,9 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse cancel(UUID id) {
-        Order order = orders.findWithItemsById(id).orElseThrow(() -> new OrderNotFoundException(id));
+    public OrderResponse cancel(UUID customerId, UUID id) {
+        Order order =
+                orders.findWithItemsByIdAndCustomerId(id, customerId).orElseThrow(() -> new OrderNotFoundException(id));
         order.cancel();
         return OrderResponse.from(order);
     }

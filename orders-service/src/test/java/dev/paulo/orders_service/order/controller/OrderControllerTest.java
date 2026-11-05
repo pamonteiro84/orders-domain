@@ -2,6 +2,7 @@ package dev.paulo.orders_service.order.controller;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -9,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.paulo.orders_service.TestcontainersConfiguration;
+import dev.paulo.orders_service.user.domain.User;
+import dev.paulo.orders_service.user.repository.UserRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +20,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -25,24 +29,28 @@ class OrderControllerTest {
 
     private static final String ADAGIO = "00000000-0000-0000-0000-000000000001";
     private static final String FRAPPE = "00000000-0000-0000-0000-000000000004";
-    private static final String CUSTOMER = "11111111-1111-1111-1111-111111111111";
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository users;
 
     @Test
     void createOrder_returns201WithLocationAndServerCalculatedTotal() throws Exception {
         String body = """
                 {
-                  "customerId": "%s",
                   "items": [
                     { "productId": "%s", "quantity": 2 },
                     { "productId": "%s", "quantity": 1 }
                   ]
                 }
-                """.formatted(CUSTOMER, ADAGIO, FRAPPE);
+                """.formatted(ADAGIO, FRAPPE);
 
-        mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/orders")
+                        .with(as(newCustomer()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", startsWith("/orders/")))
                 .andExpect(jsonPath("$.status").value("PENDING"))
@@ -51,12 +59,35 @@ class OrderControllerTest {
     }
 
     @Test
+    void createOrder_withCustomerIdInBody_usesCustomerFromToken() throws Exception {
+        String ana = newCustomer();
+        String rui = newCustomer();
+        String body = """
+                { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 1 } ] }
+                """.formatted(rui, ADAGIO);
+
+        mockMvc.perform(post("/orders")
+                        .with(as(ana))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/orders").with(as(ana)))
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(get("/orders").with(as(rui)))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
     void createOrder_withZeroQuantity_returns400() throws Exception {
         String body = """
-                { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 0 } ] }
-                """.formatted(CUSTOMER, ADAGIO);
+                { "items": [ { "productId": "%s", "quantity": 0 } ] }
+                """.formatted(ADAGIO);
 
-        mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/orders")
+                        .with(as(newCustomer()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Invalid request"))
                 .andExpect(jsonPath("$.errors[0].field").value("items[0].quantity"));
@@ -65,10 +96,13 @@ class OrderControllerTest {
     @Test
     void createOrder_withEmptyItems_returns400() throws Exception {
         String body = """
-                { "customerId": "%s", "items": [] }
-                """.formatted(CUSTOMER);
+                { "items": [] }
+                """;
 
-        mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/orders")
+                        .with(as(newCustomer()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isBadRequest());
     }
 
@@ -76,10 +110,13 @@ class OrderControllerTest {
     void createOrder_withUnknownProduct_returns422() throws Exception {
         String unknown = "00000000-0000-0000-0000-000000000999";
         String body = """
-                { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 1 } ] }
-                """.formatted(CUSTOMER, unknown);
+                { "items": [ { "productId": "%s", "quantity": 1 } ] }
+                """.formatted(unknown);
 
-        mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/orders")
+                        .with(as(newCustomer()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.title").value("Product not found"))
                 .andExpect(jsonPath("$.productId").value(unknown));
@@ -87,24 +124,26 @@ class OrderControllerTest {
 
     @Test
     void getOrder_returns200WithItemsAndTotal() throws Exception {
+        String customer = newCustomer();
         String body = """
                 {
-                  "customerId": "%s",
                   "items": [
                     { "productId": "%s", "quantity": 2 },
                     { "productId": "%s", "quantity": 1 }
                   ]
                 }
-                """.formatted(CUSTOMER, ADAGIO, FRAPPE);
+                """.formatted(ADAGIO, FRAPPE);
 
-        String location = mockMvc.perform(
-                        post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        String location = mockMvc.perform(post("/orders")
+                        .with(as(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
                 .getHeader("Location");
 
-        mockMvc.perform(get(location))
+        mockMvc.perform(get(location).with(as(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.totalAmount").value(119.88))
@@ -115,31 +154,37 @@ class OrderControllerTest {
     void getOrder_withUnknownId_returns404() throws Exception {
         String unknown = "00000000-0000-0000-0000-000000000999";
 
-        mockMvc.perform(get("/orders/" + unknown))
+        mockMvc.perform(get("/orders/" + unknown).with(as(newCustomer())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Order not found"))
                 .andExpect(jsonPath("$.orderId").value(unknown));
     }
 
     @Test
+    void getOrder_ofAnotherCustomer_returns404() throws Exception {
+        String id = createOrderFor(newCustomer());
+
+        mockMvc.perform(get("/orders/" + id).with(as(newCustomer())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Order not found"));
+    }
+
+    @Test
     void listOrders_returnsCustomerOrdersNewestFirstWithPageMetadata() throws Exception {
-        String customer = UUID.randomUUID().toString();
+        String customer = newCustomer();
         String first = createOrderFor(customer);
         createOrderFor(customer);
         String last = createOrderFor(customer);
-        createOrderFor(UUID.randomUUID().toString()); // outro cliente: não deve aparecer
+        createOrderFor(newCustomer()); // outro cliente: não deve aparecer
 
-        mockMvc.perform(get("/orders").param("customerId", customer).param("size", "2"))
+        mockMvc.perform(get("/orders").with(as(customer)).param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(2)))
                 .andExpect(jsonPath("$.content[0].id").value(last))
                 .andExpect(jsonPath("$.totalElements").value(3))
                 .andExpect(jsonPath("$.totalPages").value(2));
 
-        mockMvc.perform(get("/orders")
-                        .param("customerId", customer)
-                        .param("page", "1")
-                        .param("size", "2"))
+        mockMvc.perform(get("/orders").with(as(customer)).param("page", "1").param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].id").value(first));
@@ -147,37 +192,42 @@ class OrderControllerTest {
 
     @Test
     void listOrders_forCustomerWithoutOrders_returnsEmptyPage() throws Exception {
-        mockMvc.perform(get("/orders").param("customerId", UUID.randomUUID().toString()))
+        mockMvc.perform(get("/orders").with(as(newCustomer())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)))
                 .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
-    void listOrders_withoutCustomerId_returns400() throws Exception {
-        mockMvc.perform(get("/orders")).andExpect(status().isBadRequest());
+    void listOrders_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/orders"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate", "Bearer"))
+                .andExpect(jsonPath("$.title").value("Authentication required"));
     }
 
     @Test
     void cancelOrder_pending_returns200WithCancelledStatus() throws Exception {
-        String id = createOrderFor(CUSTOMER);
+        String customer = newCustomer();
+        String id = createOrderFor(customer);
 
-        mockMvc.perform(post("/orders/" + id + "/cancel"))
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id))
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
 
-        mockMvc.perform(get("/orders/" + id))
+        mockMvc.perform(get("/orders/" + id).with(as(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
     }
 
     @Test
     void cancelOrder_alreadyCancelled_returns409() throws Exception {
-        String id = createOrderFor(CUSTOMER);
-        mockMvc.perform(post("/orders/" + id + "/cancel")).andExpect(status().isOk());
+        String customer = newCustomer();
+        String id = createOrderFor(customer);
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer))).andExpect(status().isOk());
 
-        mockMvc.perform(post("/orders/" + id + "/cancel"))
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.orderId").value(id))
                 .andExpect(jsonPath("$.currentStatus").value("CANCELLED"));
@@ -187,18 +237,42 @@ class OrderControllerTest {
     void cancelOrder_withUnknownId_returns404() throws Exception {
         String unknown = "00000000-0000-0000-0000-000000000999";
 
-        mockMvc.perform(post("/orders/" + unknown + "/cancel"))
+        mockMvc.perform(post("/orders/" + unknown + "/cancel").with(as(newCustomer())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.orderId").value(unknown));
     }
 
+    @Test
+    void cancelOrder_ofAnotherCustomer_returns404AndKeepsOrderPending() throws Exception {
+        String owner = newCustomer();
+        String id = createOrderFor(owner);
+
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(newCustomer())))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/orders/" + id).with(as(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    private String newCustomer() {
+        User user = users.save(new User("cliente-" + UUID.randomUUID() + "@x.pt", "hash"));
+        return user.getId().toString();
+    }
+
+    private RequestPostProcessor as(String customerId) {
+        return jwt().jwt(token -> token.subject(customerId));
+    }
+
     private String createOrderFor(String customerId) throws Exception {
         String body = """
-                { "customerId": "%s", "items": [ { "productId": "%s", "quantity": 1 } ] }
-                """.formatted(customerId, ADAGIO);
+                { "items": [ { "productId": "%s", "quantity": 1 } ] }
+                """.formatted(ADAGIO);
 
-        String location = mockMvc.perform(
-                        post("/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        String location = mockMvc.perform(post("/orders")
+                        .with(as(customerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()

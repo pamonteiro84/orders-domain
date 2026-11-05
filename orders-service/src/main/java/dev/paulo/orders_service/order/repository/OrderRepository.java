@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     @EntityGraph(attributePaths = "items")
-    Optional<Order> findWithItemsById(UUID id);
+    Optional<Order> findWithItemsByIdAndCustomerId(UUID id, UUID customerId);
 
     Page<Order> findByCustomerId(UUID customerId, org.springframework.data.domain.Pageable pageable);
 }

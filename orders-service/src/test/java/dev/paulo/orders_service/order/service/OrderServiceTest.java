@@ -52,9 +52,9 @@ class OrderServiceTest {
         when(products.findAllById(anyCollection())).thenReturn(List.of(product));
         when(orders.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        var request = new CreateOrderRequest(UUID.randomUUID(), List.of(new CreateOrderRequest.Item(productId, 2)));
+        var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(productId, 2)));
 
-        OrderResponse response = service.create(request);
+        OrderResponse response = service.create(UUID.randomUUID(), request);
 
         assertThat(response.totalAmount()).isEqualByComparingTo("79.98");
         assertThat(response.items().get(0).unitPrice()).isEqualByComparingTo("39.99");
@@ -65,19 +65,21 @@ class OrderServiceTest {
         UUID unknown = UUID.randomUUID();
         when(products.findAllById(anyCollection())).thenReturn(List.of());
 
-        var request = new CreateOrderRequest(UUID.randomUUID(), List.of(new CreateOrderRequest.Item(unknown, 1)));
+        var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(unknown, 1)));
 
-        assertThatThrownBy(() -> service.create(request)).isInstanceOf(ProductNotFoundException.class);
+        assertThatThrownBy(() -> service.create(UUID.randomUUID(), request))
+                .isInstanceOf(ProductNotFoundException.class);
         verify(orders, never()).save(any());
     }
 
     @Test
     void get_returnsOrderWithItems() {
-        Order order = new Order(UUID.randomUUID());
+        UUID customer = UUID.randomUUID();
+        Order order = new Order(customer);
         order.addItem(UUID.randomUUID(), 2, new BigDecimal("39.99"));
-        when(orders.findWithItemsById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findWithItemsByIdAndCustomerId(order.getId(), customer)).thenReturn(Optional.of(order));
 
-        OrderResponse response = service.get(order.getId());
+        OrderResponse response = service.get(customer, order.getId());
 
         assertThat(response.id()).isEqualTo(order.getId());
         assertThat(response.items()).hasSize(1);
@@ -86,10 +88,20 @@ class OrderServiceTest {
 
     @Test
     void get_withUnknownId_throwsOrderNotFound() {
+        UUID customer = UUID.randomUUID();
         UUID unknown = UUID.randomUUID();
-        when(orders.findWithItemsById(unknown)).thenReturn(Optional.empty());
+        when(orders.findWithItemsByIdAndCustomerId(unknown, customer)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.get(unknown)).isInstanceOf(OrderNotFoundException.class);
+        assertThatThrownBy(() -> service.get(customer, unknown)).isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
+    void cancel_ofOtherCustomersOrder_throwsOrderNotFound() {
+        UUID customer = UUID.randomUUID();
+        UUID orderOfAnother = UUID.randomUUID();
+        when(orders.findWithItemsByIdAndCustomerId(orderOfAnother, customer)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.cancel(customer, orderOfAnother)).isInstanceOf(OrderNotFoundException.class);
     }
 
     @Test

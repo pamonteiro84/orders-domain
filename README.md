@@ -4,9 +4,9 @@ An orders and payments platform, built in phases. The end goal is two services t
 events (`orders-service` and `payments-service`) and an AI assistant for the support team that
 looks up the real state of the system and answers questions about store policies.
 
-**Current state (phase 1):** the `orders-service`, an API to create, read, list and cancel orders
-against a small product catalog. Prices are always taken from the catalog on the server, never
-from the client.
+**Current state (phase 2 in progress):** the `orders-service`, an API where customers register, log
+in with a JWT and create, read, list and cancel their own orders against a small product catalog.
+Prices are always taken from the catalog on the server, never from the client.
 
 **Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Flyway,
 Testcontainers, Gradle.
@@ -15,8 +15,8 @@ Testcontainers, Gradle.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1. Orders | `orders-service` + Postgres: orders, catalog, cancellation, consistent errors, CI | In progress |
-| 2. Production | JWT auth, `payments-service`, Kafka with the outbox pattern, Redis (idempotency, rate limiting, cache), observability | Planned |
+| 1. Orders | `orders-service` + Postgres: orders, catalog, cancellation, consistent errors, CI | Done |
+| 2. Production | JWT auth, `payments-service`, Kafka with the outbox pattern, Redis (idempotency, rate limiting, cache), observability | In progress |
 | 3. AI | Support assistant with tool use, RAG with pgvector, MCP server, evals in CI | Planned |
 | 4. Launch | Deploy or recorded demo, documentation, architecture decision records | Planned |
 
@@ -25,12 +25,20 @@ successful payment). A paid or cancelled order cannot change again.
 
 ## Running locally
 
-Requirements: Java 21 and Docker.
+Requirements: Java 21, Docker and OpenSSL.
 
 ```bash
 cp .env.example .env   # then fill in DB_USERNAME and DB_PASSWORD
+
+# RSA key pair that signs and verifies the JWTs; keys/ is ignored by git
+mkdir -p keys
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/private.pem
+openssl pkey -in keys/private.pem -pubout -out keys/public.pem
+
 make run               # starts Postgres (Docker Compose) and the app on :8080
 ```
+
+The keys under `orders-service/src/test/resources/test-keys/` are used only by the tests.
 
 Other targets:
 
@@ -72,6 +80,12 @@ curl -X POST localhost:8080/auth/login \
 `200 OK` with an `accessToken` (JWT signed with RS256, valid for 15 minutes). A wrong password or an
 unknown email both return the same `401`.
 
+Every `/orders` endpoint requires this token. The examples below read it from a variable:
+
+```bash
+export TOKEN=<accessToken from the login response>
+```
+
 ### List products
 
 ```bash
@@ -82,9 +96,9 @@ curl localhost:8080/products
 
 ```bash
 curl -i -X POST localhost:8080/orders \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
-        "customerId": "11111111-1111-1111-1111-111111111111",
         "items": [
           { "productId": "00000000-0000-0000-0000-000000000001", "quantity": 2 },
           { "productId": "00000000-0000-0000-0000-000000000004", "quantity": 1 }
@@ -92,19 +106,21 @@ curl -i -X POST localhost:8080/orders \
       }'
 ```
 
-`201 Created` with a `Location: /orders/{id}` header. The order starts as `PENDING` and the
-total (`119.88`) is calculated on the server.
+`201 Created` with a `Location: /orders/{id}` header. The order belongs to the customer in the token,
+starts as `PENDING` and the total (`119.88`) is calculated on the server.
 
 ### Get an order
 
 ```bash
-curl localhost:8080/orders/{id}
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/orders/{id}
 ```
 
-### List a customer's orders
+An order that belongs to another customer returns `404`.
+
+### List your orders
 
 ```bash
-curl 'localhost:8080/orders?customerId=11111111-1111-1111-1111-111111111111&page=0&size=20'
+curl -H "Authorization: Bearer $TOKEN" 'localhost:8080/orders?page=0&size=20'
 ```
 
 Newest first. `size` is capped at 100. The response has `content`, `page`, `size`,
@@ -113,7 +129,7 @@ Newest first. `size` is capped at 100. The response has `content`, `page`, `size
 ### Cancel an order
 
 ```bash
-curl -X POST localhost:8080/orders/{id}/cancel
+curl -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/orders/{id}/cancel
 ```
 
 Only `PENDING` orders can be cancelled. Cancelling again returns `409`.
@@ -131,8 +147,8 @@ and `instance`, plus the data needed to act on it:
 | Status | When                                                                 |
 |--------|----------------------------------------------------------------------|
 | 400    | Invalid body or parameters; validation errors include an `errors` list of `field` and `message` |
-| 401    | Invalid email or password                                            |
-| 404    | Order not found (`orderId`)                                          |
+| 401    | Missing, invalid or expired token; invalid email or password         |
+| 404    | Order not found, or it belongs to another customer (`orderId`)       |
 | 409    | Order cannot be cancelled in its current status, or was modified concurrently; email already registered |
 | 422    | The order references a product that does not exist (`productId`)     |
 | 500    | Unexpected error; details are logged, never returned                 |
@@ -141,6 +157,11 @@ and `instance`, plus the data needed to act on it:
 
 - **Prices come from the server.** The request only carries `productId` and `quantity`; accepting
   a price from the client would let anyone set their own price.
+- **The customer comes from the token.** Orders are always filtered by the token's `sub`, never by
+  an id sent by the client, so a customer cannot read or change someone else's orders. Those orders
+  return `404` rather than `403`, which would reveal that they exist.
+- **JWT signed with RS256.** The private key signs and the public key only verifies, so
+  `payments-service` will be able to validate tokens without being able to create them.
 - **Flyway owns the schema.** Hibernate runs with `ddl-auto: validate`, so it checks the entities
   against the migrations instead of changing the database.
 - **`Order` is the aggregate root.** Items are only added through `Order.addItem`, which keeps the

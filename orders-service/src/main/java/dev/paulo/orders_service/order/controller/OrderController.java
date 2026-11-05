@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,27 +30,32 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse response = orderService.create(request);
+    public ResponseEntity<OrderResponse> create(
+            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateOrderRequest request) {
+        OrderResponse response = orderService.create(customerId(jwt), request);
         URI location = URI.create("/orders/" + response.id());
         return ResponseEntity.created(location).body(response);
     }
 
     @GetMapping("/{id}")
-    public OrderResponse get(@PathVariable UUID id) {
-        return orderService.get(id);
+    public OrderResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return orderService.get(customerId(jwt), id);
     }
 
     @GetMapping
     public PageResponse<OrderSummaryResponse> list(
-            @RequestParam UUID customerId,
+            @AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return orderService.list(customerId, page, size);
+        return orderService.list(customerId(jwt), page, size);
     }
 
     @PostMapping("/{id}/cancel")
-    public OrderResponse cancel(@PathVariable UUID id) {
-        return orderService.cancel(id);
+    public OrderResponse cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return orderService.cancel(customerId(jwt), id);
+    }
+
+    private UUID customerId(Jwt jwt) {
+        return UUID.fromString(jwt.getSubject());
     }
 }
