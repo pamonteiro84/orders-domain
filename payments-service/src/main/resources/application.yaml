@@ -1,6 +1,14 @@
 spring:
   application:
     name: payments-service
+  datasource:
+    url: jdbc:postgresql://localhost:${PAYMENTS_DB_PORT:5434}/${PAYMENTS_DB_NAME:payments}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
 
 server:
   port: 8081
