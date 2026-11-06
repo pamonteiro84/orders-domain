@@ -11,6 +11,11 @@ read the equivalent one in another package.
 
 ## Which kind of test
 
+Only two kinds are wanted: unit tests for logic (domain rules and services) and integration tests for
+the full HTTP → DB path. Do not write tests for DTOs, mappers, repositories without custom queries,
+fakes or configuration on their own: those are covered by the integration tests that go through
+them. A DB rule, such as a unique index, is proved through the endpoint that triggers it.
+
 Start at the lowest level that can prove the behaviour. If the user names no level, start with unit
 tests. Paths are relative to `orders-service/src/test/java/dev/paulo/orders_service/`, and `<module>`
 is `order`, `product` or the module under test.
