@@ -1,5 +1,5 @@
 services:
-  postgres:
+  postgres-orders:
     image: postgres:16
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -8,12 +8,29 @@ services:
     ports:
       - "${DB_PORT}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-orders-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
       interval: 2s
       timeout: 3s
       retries: 15
 
+  postgres-payments:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${PAYMENTS_DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${PAYMENTS_DB_PORT}:5432"
+    volumes:
+      - postgres-payments-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${PAYMENTS_DB_NAME}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
 volumes:
-  postgres-data:
+  postgres-orders-data:
+  postgres-payments-data:

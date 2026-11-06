@@ -1,4 +1,4 @@
-.PHONY: docker db-up db-down db-reset build lint format test ci run stop clean clean-all
+.PHONY: docker db-up db-down db-reset build lint format test ci run run-orders run-payments stop clean clean-all
 
 -include .env
 export
@@ -34,12 +34,20 @@ test: docker
 
 ci: build lint test
 
-run: db-up
+run-orders: db-up
 	./gradlew :orders-service:bootRun --no-daemon
 
+run-payments: db-up
+	./gradlew :payments-service:bootRun --no-daemon
+
+run: db-up
+	$(MAKE) -j2 run-orders run-payments
+
 stop:
-	@pid=$$(lsof -tiTCP:8080 -sTCP:LISTEN); \
-	if [ -n "$$pid" ]; then kill $$pid && echo "stopped $$pid"; else echo "nothing on 8080"; fi
+	@for port in 8080 8081; do \
+		pid=$$(lsof -tiTCP:$$port -sTCP:LISTEN); \
+		if [ -n "$$pid" ]; then kill $$pid && echo "stopped $$port ($$pid)"; else echo "nothing on $$port"; fi; \
+	done
 
 clean:
 	./gradlew clean
