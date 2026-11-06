@@ -1,3 +1,4 @@
 rootProject.name = 'orders-domain'
 
 include 'orders-service'
+include 'payments-service'

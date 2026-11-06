@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: payments-service
+
+server:
+  port: 8081
+
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}

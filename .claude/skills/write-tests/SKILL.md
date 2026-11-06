@@ -28,6 +28,8 @@ is `order`, `product` or the module under test.
 
 - **Naming:** `method_condition_result`, such as `cancel_alreadyCancelled_throws` or
   `getOrder_withUnknownId_returns404`.
+- **Comments:** none in test code, including Javadoc. If a test needs explaining, say it in the reply
+  to the user.
 - **Assertions:** AssertJ in unit tests (`assertThat`, `assertThatThrownBy`), `jsonPath` in
   integration tests.
 - **Money:** `isEqualByComparingTo("119.88")`, never `isEqualTo`, because `BigDecimal.equals`
