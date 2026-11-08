@@ -50,7 +50,7 @@ class JwtAuthenticationTest {
 
     @Test
     void protectedPath_withoutToken_returns401() throws Exception {
-        mockMvc.perform(get("/payments"))
+        mockMvc.perform(get(PROTECTED_PATH))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Bearer"))
                 .andExpect(jsonPath("$.title").value("Authentication required"));
@@ -60,7 +60,7 @@ class JwtAuthenticationTest {
     void protectedPath_withTokenSignedByOrdersService_passesAuthentication() throws Exception {
         String token = sign(encoder(ordersPublicKey, ordersPrivateKey));
 
-        mockMvc.perform(get("/payments").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
@@ -71,7 +71,7 @@ class JwtAuthenticationTest {
         KeyPair keys = generator.generateKeyPair();
         String token = sign(encoder((RSAPublicKey) keys.getPublic(), (RSAPrivateKey) keys.getPrivate()));
 
-        mockMvc.perform(get("/payments").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.title").value("Authentication required"));
     }

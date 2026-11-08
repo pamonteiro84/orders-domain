@@ -1,5 +1,7 @@
 package dev.paulo.payments_service.common;
 
+import dev.paulo.payments_service.payment.exception.OrderNotFoundException;
+import dev.paulo.payments_service.payment.exception.OrderNotPayableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -38,6 +40,20 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         LOG.error("Unexpected error", ex);
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
         problem.setTitle("Internal error");
+        return problem;
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    ProblemDetail handle(OrderNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problem.setTitle("order not found");
+        return problem;
+    }
+
+    @ExceptionHandler(OrderNotPayableException.class)
+    ProblemDetail handle(OrderNotPayableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("order cannot be paid");
         return problem;
     }
 

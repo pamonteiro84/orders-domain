@@ -10,7 +10,7 @@ public record PaymentResponse(UUID id, UUID orderId, PaymentStatus status, BigDe
     public static PaymentResponse from(Payment payment) {
         return new PaymentResponse(
                 payment.getId(),
-                payment.getCustomerId(),
+                payment.getOrderId(),
                 payment.getStatus(),
                 payment.getAmount(),
                 payment.getCreatedAt());
