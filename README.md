@@ -28,7 +28,7 @@ successful payment). A paid or cancelled order cannot change again.
 Requirements: Java 21, Docker and OpenSSL.
 
 ```bash
-cp .env.example .env   # then fill in DB_USERNAME and DB_PASSWORD
+cp .env.example .env   # then fill in ORDERS_DB_USERNAME, ORDERS_DB_PASSWORD and PAYMENTS_DB_PASSWORD
 
 # RSA key pair that signs and verifies the JWTs; keys/ is ignored by git
 mkdir -p keys

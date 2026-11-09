@@ -3,13 +3,8 @@
 -include .env
 export
 
-ifneq ($(wildcard $(HOME)/.colima),)
-export DOCKER_HOST := unix://$(HOME)/.colima/default/docker.sock
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE := /var/run/docker.sock
-endif
-
 docker:
-	@colima status >/dev/null 2>&1 || colima start
+	@docker info >/dev/null 2>&1 || (echo "Docker não está a correr" && exit 1)
 
 db-up: docker
 	docker compose up -d --wait

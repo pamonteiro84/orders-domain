@@ -2,9 +2,9 @@ spring:
   application:
     name: orders-service
   datasource:
-    url: jdbc:postgresql://localhost:${DB_PORT:5433}/${DB_NAME:orders}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://localhost:${DB_PORT:5433}/${ORDERS_DB_NAME:orders}
+    username: ${ORDERS_DB_USERNAME}
+    password: ${ORDERS_DB_PASSWORD}
   jpa:
     open-in-view: false
     hibernate:
