@@ -9,6 +9,16 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  data:
+    redis:
+      host: localhost
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+
+management:
+  health:
+    redis:
+      enabled: false
 
 server:
   port: 8081
