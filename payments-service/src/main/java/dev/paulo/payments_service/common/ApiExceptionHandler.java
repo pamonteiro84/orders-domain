@@ -46,14 +46,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(OrderNotFoundException.class)
     ProblemDetail handle(OrderNotFoundException ex) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
-        problem.setTitle("order not found");
+        problem.setTitle("Order not found");
         return problem;
     }
 
     @ExceptionHandler(OrderNotPayableException.class)
     ProblemDetail handle(OrderNotPayableException ex) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
-        problem.setTitle("order cannot be paid");
+        problem.setTitle("Order cannot be paid");
         return problem;
     }
 

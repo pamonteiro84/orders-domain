@@ -29,7 +29,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = "jwt.public-key=classpath:test-keys/public.pem")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class JwtAuthenticationTest {
@@ -42,6 +42,8 @@ class JwtAuthenticationTest {
 
     @Value("classpath:test-keys/private.pem")
     private RSAPrivateKey ordersPrivateKey;
+
+    private static final String PROTECTED_PATH = "/no-such-path";
 
     @Test
     void health_withoutToken_returns200() throws Exception {
