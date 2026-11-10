@@ -6,5 +6,5 @@ import java.util.UUID;
 
 public interface PaymentProvider {
 
-    PaymentStatus charge(UUID orderId, BigDecimal amount);
+    PaymentStatus charge(UUID orderId, BigDecimal amount, String idempotencyKey);
 }

@@ -1,0 +1,20 @@
+info:
+  name: Cancel order by Id
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{ordersUrl}}/orders/:id/cancel"
+  params:
+    - name: id
+      value: ""
+      type: path
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

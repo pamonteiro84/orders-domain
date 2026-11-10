@@ -1,0 +1,23 @@
+info:
+  name: Get orders paginated
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{ordersUrl}}/orders?page=0&size=20"
+  params:
+    - name: page
+      value: "0"
+      type: query
+    - name: size
+      value: "20"
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 public class FakePaymentProvider implements PaymentProvider {
 
     @Override
-    public PaymentStatus charge(UUID orderId, BigDecimal amount) {
+    public PaymentStatus charge(UUID orderId, BigDecimal amount, String idempotencyKey) {
         return PaymentStatus.SUCCEEDED;
     }
 }

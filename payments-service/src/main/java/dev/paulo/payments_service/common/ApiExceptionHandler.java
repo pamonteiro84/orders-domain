@@ -1,7 +1,9 @@
 package dev.paulo.payments_service.common;
 
+import dev.paulo.payments_service.payment.exception.IdempotencyKeyReusedException;
 import dev.paulo.payments_service.payment.exception.OrderNotFoundException;
 import dev.paulo.payments_service.payment.exception.OrderNotPayableException;
+import dev.paulo.payments_service.payment.exception.PaymentInProgressException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -54,6 +56,20 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handle(OrderNotPayableException ex) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         problem.setTitle("Order cannot be paid");
+        return problem;
+    }
+
+    @ExceptionHandler(PaymentInProgressException.class)
+    ProblemDetail handle(PaymentInProgressException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Payment in progress or already made");
+        return problem;
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    ProblemDetail handle(IdempotencyKeyReusedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        problem.setTitle("Idempotency key already used");
         return problem;
     }
 

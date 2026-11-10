@@ -1,0 +1,8 @@
+name: local
+variables:
+  - name: ordersUrl
+    value: http://localhost:8080
+    description: ""
+  - name: paymentsUrl
+    value: http://localhost:8081
+    description: ""

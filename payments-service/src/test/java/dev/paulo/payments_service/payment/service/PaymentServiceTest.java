@@ -32,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PaymentServiceTest {
 
     private static final BigDecimal AMOUNT = new BigDecimal("119.88");
+    private static final String KEY = "k1";
 
     @Mock
     OrderViewRepository orderViews;
@@ -50,10 +51,10 @@ class PaymentServiceTest {
         UUID customerId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         givenOrder(orderId, customerId, OrderViewStatus.PENDING);
-        when(provider.charge(eq(orderId), any())).thenReturn(PaymentStatus.SUCCEEDED);
+        when(provider.charge(eq(orderId), any(), eq(KEY))).thenReturn(PaymentStatus.SUCCEEDED);
         when(payments.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentResponse response = service.pay(customerId, orderId);
+        PaymentResponse response = service.pay(customerId, orderId, KEY);
 
         ArgumentCaptor<Payment> saved = ArgumentCaptor.forClass(Payment.class);
         verify(payments).save(saved.capture());
@@ -70,10 +71,10 @@ class PaymentServiceTest {
         UUID customerId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         givenOrder(orderId, customerId, OrderViewStatus.PENDING);
-        when(provider.charge(eq(orderId), any())).thenReturn(PaymentStatus.FAILED);
+        when(provider.charge(eq(orderId), any(), eq(KEY))).thenReturn(PaymentStatus.FAILED);
         when(payments.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentResponse response = service.pay(customerId, orderId);
+        PaymentResponse response = service.pay(customerId, orderId, KEY);
 
         assertThat(response.status()).isEqualTo(PaymentStatus.FAILED);
     }
@@ -84,8 +85,8 @@ class PaymentServiceTest {
         UUID orderId = UUID.randomUUID();
         when(orderViews.findByOrderIdAndCustomerId(orderId, customerId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.pay(customerId, orderId)).isInstanceOf(OrderNotFoundException.class);
-        verify(provider, never()).charge(any(), any());
+        assertThatThrownBy(() -> service.pay(customerId, orderId, KEY)).isInstanceOf(OrderNotFoundException.class);
+        verify(provider, never()).charge(any(), any(), any());
         verify(payments, never()).save(any());
     }
 
@@ -95,8 +96,8 @@ class PaymentServiceTest {
         UUID orderId = UUID.randomUUID();
         givenOrder(orderId, customerId, OrderViewStatus.CANCELLED);
 
-        assertThatThrownBy(() -> service.pay(customerId, orderId)).isInstanceOf(OrderNotPayableException.class);
-        verify(provider, never()).charge(any(), any());
+        assertThatThrownBy(() -> service.pay(customerId, orderId, KEY)).isInstanceOf(OrderNotPayableException.class);
+        verify(provider, never()).charge(any(), any(), any());
         verify(payments, never()).save(any());
     }
 

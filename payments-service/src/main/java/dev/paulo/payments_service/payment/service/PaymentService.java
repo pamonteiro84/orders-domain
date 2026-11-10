@@ -28,7 +28,7 @@ public class PaymentService {
     }
 
     @Transactional
-    public PaymentResponse pay(UUID customerId, UUID orderId) {
+    public PaymentResponse pay(UUID customerId, UUID orderId, String idempotencyKey) {
 
         OrderView order = orderViews
                 .findByOrderIdAndCustomerId(orderId, customerId)
@@ -38,7 +38,7 @@ public class PaymentService {
             throw new OrderNotPayableException(orderId, order.getStatus());
         }
 
-        PaymentStatus status = provider.charge(orderId, order.getAmount());
+        PaymentStatus status = provider.charge(orderId, order.getAmount(), idempotencyKey);
         Payment payment = new Payment(orderId, customerId, order.getAmount(), status);
 
         return PaymentResponse.from(payments.save(payment));

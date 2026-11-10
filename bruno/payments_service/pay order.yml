@@ -1,0 +1,22 @@
+info:
+  name: pay order
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{paymentsUrl}}/payments"
+  headers:
+    - name: Idempotency-Key
+      value: k1
+  body:
+    type: json
+    data: '{ "orderId": "8ce27e9e-c8e2-45ad-aef0-de66a8dfb56b" }'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

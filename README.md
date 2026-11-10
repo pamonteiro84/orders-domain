@@ -6,9 +6,11 @@ looks up the real state of the system and answers questions about store policies
 
 **Current state (phase 2 in progress):** the `orders-service`, an API where customers register, log
 in with a JWT and create, read, list and cancel their own orders against a small product catalog.
-Prices are always taken from the catalog on the server, never from the client.
+Prices are always taken from the catalog on the server, never from the client. The
+`payments-service` takes payments for those orders through a simulated provider, with safe retries
+backed by Redis. The two services are not connected by events yet.
 
-**Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Flyway,
+**Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Redis 7, Flyway,
 Testcontainers, Gradle.
 
 ## Roadmap
@@ -35,28 +37,33 @@ mkdir -p keys
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/private.pem
 openssl pkey -in keys/private.pem -pubout -out keys/public.pem
 
-make run               # starts Postgres (Docker Compose) and the app on :8080
+make run               # starts Postgres and Redis (Docker Compose), orders-service on :8080 and payments-service on :8081
 ```
 
-The keys under `orders-service/src/test/resources/test-keys/` are used only by the tests.
+The keys under each service's `src/test/resources/test-keys/` are used only by the tests.
 
 Other targets:
 
-| Command         | What it does                                        |
-|-----------------|-----------------------------------------------------|
-| `make test`     | Runs all tests (Postgres via Testcontainers)        |
-| `make ci`       | Build, lint/format check and tests, same as CI      |
-| `make format`   | Applies the code formatter (Spotless)               |
-| `make stop`     | Stops the app running on :8080                      |
-| `make db-down`  | Stops Postgres, keeps the data                      |
-| `make db-reset` | Stops Postgres and **deletes** the local data       |
+| Command             | What it does                                            |
+|---------------------|---------------------------------------------------------|
+| `make run-orders`   | Starts the infrastructure and only `orders-service`     |
+| `make run-payments` | Starts the infrastructure and only `payments-service`   |
+| `make test`         | Runs all tests (Postgres and Redis via Testcontainers)  |
+| `make ci`           | Build, lint/format check and tests, same as CI          |
+| `make format`       | Applies the code formatter (Spotless)                   |
+| `make stop`         | Stops the apps running on :8080 and :8081               |
+| `make db-down`      | Stops Postgres and Redis, keeps the Postgres data       |
+| `make db-reset`     | Stops Postgres and Redis and **deletes** the local data |
 
-Health check: `curl localhost:8080/actuator/health`
+Health checks: `curl localhost:8080/actuator/health` and `curl localhost:8081/actuator/health`
 
 ## API
 
 The database is seeded with six products; the examples use `adagio` (`...0001`, 39.99) and
 `frappe` (`...0004`, 39.90).
+
+The same requests are in a [Bruno](https://www.usebruno.com) collection under `bruno/`, with the
+`local` environment. Run `Login` first: it stores the token used by the other requests.
 
 ### Register a user
 
@@ -80,7 +87,7 @@ curl -X POST localhost:8080/auth/login \
 `200 OK` with an `accessToken` (JWT signed with RS256, valid for 15 minutes). A wrong password or an
 unknown email both return the same `401`.
 
-Every `/orders` endpoint requires this token. The examples below read it from a variable:
+Every `/orders` and `/payments` endpoint requires this token. The examples below read it from a variable:
 
 ```bash
 export TOKEN=<accessToken from the login response>
@@ -134,6 +141,43 @@ curl -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/orders/{id}/cancel
 
 Only `PENDING` orders can be cancelled. Cancelling again returns `409`.
 
+### Pay an order
+
+Served by `payments-service` on `:8081`, with the same token.
+
+```bash
+curl -i -X POST localhost:8081/payments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Idempotency-Key: checkout-7f3c9a10' \
+  -H 'Content-Type: application/json' \
+  -d '{ "orderId": "{id}" }'
+```
+
+`201 Created` with a `Location: /payments/{id}` header and `id`, `orderId`, `status` (`SUCCEEDED` or
+`FAILED`), `amount` and `createdAt`. The amount is read on the server, never sent by the client. The
+provider is simulated by `FakePaymentProvider`, which currently approves every payment.
+
+`payments-service` reads orders from its own `orders_view` table, which will be filled by events.
+Until then, an order only exists there if the row is inserted by hand; otherwise the request
+returns `404`. Use the order id and the user id returned by the register request:
+
+```bash
+docker compose exec postgres-payments psql -U "$(grep '^ORDERS_DB_USERNAME=' .env | cut -d= -f2)" -d payments \
+  -c "INSERT INTO orders_view (order_id, customer_id, amount, status) VALUES ('{orderId}', '{userId}', 119.88, 'PENDING');"
+```
+
+`Idempotency-Key` is required (up to 255 characters) and is chosen by the client, once per payment
+attempt. It is scoped to the customer in the token:
+
+| The same key is sent again...           | Response                                    |
+|-----------------------------------------|---------------------------------------------|
+| After the first request finished        | The original response, without a new charge |
+| While the first request is still running | `409`                                       |
+| With a different `orderId`              | `422`                                       |
+
+The stored response is kept for 24 hours. A request that fails, such as a `404`, frees the key so
+it can be retried.
+
 ## Errors
 
 Every error is a [ProblemDetail](https://www.rfc-editor.org/rfc/rfc9457) with `status`, `title`
@@ -146,11 +190,11 @@ and `instance`, plus the data needed to act on it:
 
 | Status | When                                                                 |
 |--------|----------------------------------------------------------------------|
-| 400    | Invalid body or parameters; validation errors include an `errors` list of `field` and `message` |
+| 400    | Invalid body or parameters, or a missing or invalid `Idempotency-Key`; validation errors include an `errors` list of `field` and `message` |
 | 401    | Missing, invalid or expired token; invalid email or password         |
 | 404    | Order not found, or it belongs to another customer (`orderId`)       |
-| 409    | Order cannot be cancelled in its current status, or was modified concurrently; email already registered |
-| 422    | The order references a product that does not exist (`productId`)     |
+| 409    | Order cannot be cancelled or paid in its current status, or was modified concurrently; email already registered; payment in progress or already made |
+| 422    | The order references a product that does not exist (`productId`); `Idempotency-Key` already used for another order |
 | 500    | Unexpected error; details are logged, never returned                 |
 
 ## Design decisions
@@ -161,7 +205,17 @@ and `instance`, plus the data needed to act on it:
   an id sent by the client, so a customer cannot read or change someone else's orders. Those orders
   return `404` rather than `403`, which would reveal that they exist.
 - **JWT signed with RS256.** The private key signs and the public key only verifies, so
-  `payments-service` will be able to validate tokens without being able to create them.
+  `payments-service` validates tokens without being able to create them.
+- **One database per service.** `payments-service` never reads the `orders-service` database. It
+  keeps its own `orders_view`, so a schema change or an outage in one service does not break the
+  other.
+- **Idempotency in Redis, before the charge.** `SET NX` with a 60-second expiry reserves the key, so
+  of two simultaneous requests only one reaches the provider. The reservation expires by itself if
+  the app dies mid-charge, and the finished response replaces it for 24 hours. This runs outside the
+  database transaction, so a response is only stored after the commit.
+- **Postgres is the final guarantee.** A partial unique index allows one `SUCCEEDED` payment per
+  order. If Redis is down, payments continue without a reservation and a duplicate is rejected by
+  the index with `409`.
 - **Flyway owns the schema.** Hibernate runs with `ddl-auto: validate`, so it checks the entities
   against the migrations instead of changing the database.
 - **`Order` is the aggregate root.** Items are only added through `Order.addItem`, which keeps the
@@ -174,7 +228,8 @@ and `instance`, plus the data needed to act on it:
 ## Tests and CI
 
 Unit tests cover the domain rules (`Order`) and the services with Mockito. Integration tests run
-the full HTTP → database flow with MockMvc against a real Postgres started by Testcontainers.
+the full HTTP → database flow with MockMvc against a real Postgres started by Testcontainers, which
+also starts a real Redis for `payments-service`.
 
 GitHub Actions runs build, lint/format (Spotless, Checkstyle) and tests on every push and pull
 request.
