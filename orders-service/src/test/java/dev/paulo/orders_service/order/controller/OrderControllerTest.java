@@ -1,5 +1,6 @@
 package dev.paulo.orders_service.order.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -10,8 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.paulo.orders_service.TestcontainersConfiguration;
+import dev.paulo.orders_service.order.event.OrderCreatedEvent;
+import dev.paulo.orders_service.outbox.domain.OutboxEvent;
+import dev.paulo.orders_service.outbox.repository.OutboxEventRepository;
 import dev.paulo.orders_service.user.domain.User;
 import dev.paulo.orders_service.user.repository.UserRepository;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +26,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -35,6 +42,12 @@ class OrderControllerTest {
 
     @Autowired
     private UserRepository users;
+
+    @Autowired
+    private OutboxEventRepository outbox;
+
+    @Autowired
+    private JsonMapper jsonMapper;
 
     @Test
     void createOrder_returns201WithLocationAndServerCalculatedTotal() throws Exception {
@@ -107,11 +120,33 @@ class OrderControllerTest {
     }
 
     @Test
-    void createOrder_withUnknownProduct_returns422() throws Exception {
+    void createOrder_writesOrderCreatedEventToOutbox() throws Exception {
+        String customer = newCustomer();
+        String id = createOrderFor(customer);
+
+        List<OutboxEvent> events = outboxEventsFor(UUID.fromString(id));
+
+        assertThat(events).hasSize(1);
+        OutboxEvent event = events.get(0);
+        assertThat(event.getType()).isEqualTo(OrderCreatedEvent.TYPE);
+        assertThat(event.getPublishedAt()).isEmpty();
+
+        JsonNode payload = jsonMapper.readTree(event.getPayload());
+        assertThat(payload.get("type").asString()).isEqualTo(OrderCreatedEvent.TYPE);
+        assertThat(payload.get("orderId").asString()).isEqualTo(id);
+        assertThat(payload.get("customerId").asString()).isEqualTo(customer);
+        assertThat(payload.get("amount").decimalValue()).isEqualByComparingTo("39.99");
+        assertThat(payload.get("eventId").asString()).isNotBlank();
+        assertThat(payload.get("occurredAt").isString()).isTrue();
+    }
+
+    @Test
+    void createOrder_withUnknownProduct_returns422AndWritesNoOutboxEvent() throws Exception {
         String unknown = "00000000-0000-0000-0000-000000000999";
         String body = """
                 { "items": [ { "productId": "%s", "quantity": 1 } ] }
                 """.formatted(unknown);
+        long outboxBefore = outbox.count();
 
         mockMvc.perform(post("/orders")
                         .with(as(newCustomer()))
@@ -120,6 +155,8 @@ class OrderControllerTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.title").value("Product not found"))
                 .andExpect(jsonPath("$.productId").value(unknown));
+
+        assertThat(outbox.count()).isEqualTo(outboxBefore);
     }
 
     @Test
@@ -258,6 +295,12 @@ class OrderControllerTest {
     private String newCustomer() {
         User user = users.save(new User("cliente-" + UUID.randomUUID() + "@x.pt", "hash"));
         return user.getId().toString();
+    }
+
+    private List<OutboxEvent> outboxEventsFor(UUID orderId) {
+        return outbox.findAll().stream()
+                .filter(event -> event.getAggregateId().equals(orderId))
+                .toList();
     }
 
     private RequestPostProcessor as(String customerId) {

@@ -10,9 +10,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.paulo.orders_service.common.event.EventPublisher;
 import dev.paulo.orders_service.order.domain.Order;
 import dev.paulo.orders_service.order.dto.CreateOrderRequest;
 import dev.paulo.orders_service.order.dto.OrderResponse;
+import dev.paulo.orders_service.order.event.OrderCreatedEvent;
 import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
 import dev.paulo.orders_service.order.repository.OrderRepository;
@@ -40,6 +42,9 @@ class OrderServiceTest {
     @Mock
     ProductRepository products;
 
+    @Mock
+    EventPublisher events;
+
     @InjectMocks
     OrderService service;
 
@@ -54,10 +59,19 @@ class OrderServiceTest {
 
         var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(productId, 2)));
 
-        OrderResponse response = service.create(UUID.randomUUID(), request);
+        UUID customer = UUID.randomUUID();
+        OrderResponse response = service.create(customer, request);
 
         assertThat(response.totalAmount()).isEqualByComparingTo("79.98");
         assertThat(response.items().get(0).unitPrice()).isEqualByComparingTo("39.99");
+
+        ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+        verify(events).publish(captor.capture());
+        OrderCreatedEvent event = captor.getValue();
+        assertThat(event.type()).isEqualTo(OrderCreatedEvent.TYPE);
+        assertThat(event.orderId()).isEqualTo(response.id());
+        assertThat(event.customerId()).isEqualTo(customer);
+        assertThat(event.amount()).isEqualByComparingTo("79.98");
     }
 
     @Test
@@ -70,6 +84,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.create(UUID.randomUUID(), request))
                 .isInstanceOf(ProductNotFoundException.class);
         verify(orders, never()).save(any());
+        verify(events, never()).publish(any());
     }
 
     @Test
