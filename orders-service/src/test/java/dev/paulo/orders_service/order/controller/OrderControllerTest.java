@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.paulo.orders_service.TestcontainersConfiguration;
+import dev.paulo.orders_service.order.event.OrderCancelledEvent;
 import dev.paulo.orders_service.order.event.OrderCreatedEvent;
 import dev.paulo.orders_service.outbox.domain.OutboxEvent;
 import dev.paulo.orders_service.outbox.repository.OutboxEventRepository;
@@ -268,6 +269,30 @@ class OrderControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.orderId").value(id))
                 .andExpect(jsonPath("$.currentStatus").value("CANCELLED"));
+    }
+
+    @Test
+    void cancelOrder_writesOneOrderCancelledEventToOutboxEvenIfRepeated() throws Exception {
+        String customer = newCustomer();
+        String id = createOrderFor(customer);
+
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer))).andExpect(status().isOk());
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer))).andExpect(status().isConflict());
+
+        List<OutboxEvent> cancelled = outboxEventsFor(UUID.fromString(id)).stream()
+                .filter(event -> event.getType().equals(OrderCancelledEvent.TYPE))
+                .toList();
+
+        assertThat(cancelled).hasSize(1);
+        OutboxEvent event = cancelled.get(0);
+        assertThat(event.getPublishedAt()).isEmpty();
+
+        JsonNode payload = jsonMapper.readTree(event.getPayload());
+        assertThat(payload.get("type").asString()).isEqualTo(OrderCancelledEvent.TYPE);
+        assertThat(payload.get("orderId").asString()).isEqualTo(id);
+        assertThat(payload.get("customerId").asString()).isEqualTo(customer);
+        assertThat(payload.get("eventId").asString()).isNotBlank();
+        assertThat(payload.get("occurredAt").isString()).isTrue();
     }
 
     @Test

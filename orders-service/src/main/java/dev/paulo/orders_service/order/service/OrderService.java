@@ -6,6 +6,7 @@ import dev.paulo.orders_service.order.domain.Order;
 import dev.paulo.orders_service.order.dto.CreateOrderRequest;
 import dev.paulo.orders_service.order.dto.OrderResponse;
 import dev.paulo.orders_service.order.dto.OrderSummaryResponse;
+import dev.paulo.orders_service.order.event.OrderCancelledEvent;
 import dev.paulo.orders_service.order.event.OrderCreatedEvent;
 import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
@@ -79,7 +80,10 @@ public class OrderService {
     public OrderResponse cancel(UUID customerId, UUID id) {
         Order order =
                 orders.findWithItemsByIdAndCustomerId(id, customerId).orElseThrow(() -> new OrderNotFoundException(id));
+
         order.cancel();
+
+        events.publish(OrderCancelledEvent.from(order));
         return OrderResponse.from(order);
     }
 }

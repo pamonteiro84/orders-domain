@@ -1,18 +1,18 @@
-.PHONY: docker db-up db-down db-reset build lint format test ci run run-orders run-payments stop clean clean-all
+.PHONY: docker db-up db-down db-reset build lint format fix test ci run run-orders run-payments stop clean clean-all
 
 -include .env
 export
 
 docker:
-	@docker info >/dev/null 2>&1 || (echo "Docker não está a correr" && exit 1)
+	@docker info >/dev/null 2>&1 || orb start
 
 db-up: docker
 	docker compose up -d --wait
 
-db-down:
+db-down: docker
 	docker compose down
 
-db-reset:
+db-reset: docker
 	docker compose down -v
 
 build:
@@ -23,6 +23,10 @@ lint:
 
 format:
 	./gradlew spotlessApply
+
+fix:
+	./gradlew spotlessApply checkstyleMain checkstyleTest
+	@git status --short
 
 test: docker
 	./gradlew test

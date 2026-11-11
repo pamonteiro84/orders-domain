@@ -12,15 +12,19 @@ import static org.mockito.Mockito.when;
 
 import dev.paulo.orders_service.common.event.EventPublisher;
 import dev.paulo.orders_service.order.domain.Order;
+import dev.paulo.orders_service.order.domain.OrderStatus;
 import dev.paulo.orders_service.order.dto.CreateOrderRequest;
 import dev.paulo.orders_service.order.dto.OrderResponse;
+import dev.paulo.orders_service.order.event.OrderCancelledEvent;
 import dev.paulo.orders_service.order.event.OrderCreatedEvent;
+import dev.paulo.orders_service.order.exception.InvalidOrderTransitionException;
 import dev.paulo.orders_service.order.exception.OrderNotFoundException;
 import dev.paulo.orders_service.order.exception.ProductNotFoundException;
 import dev.paulo.orders_service.order.repository.OrderRepository;
 import dev.paulo.orders_service.product.domain.Product;
 import dev.paulo.orders_service.product.repository.ProductRepository;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -117,6 +121,44 @@ class OrderServiceTest {
         when(orders.findWithItemsByIdAndCustomerId(orderOfAnother, customer)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.cancel(customer, orderOfAnother)).isInstanceOf(OrderNotFoundException.class);
+        verify(events, never()).publish(any());
+    }
+
+    @Test
+    void cancel_pendingOrder_publishesOrderCancelledEvent() {
+        UUID customer = UUID.randomUUID();
+        Order order = new Order(customer);
+        order.addItem(UUID.randomUUID(), 1, new BigDecimal("39.99"));
+        when(orders.findWithItemsByIdAndCustomerId(order.getId(), customer)).thenReturn(Optional.of(order));
+
+        OrderResponse response = service.cancel(customer, order.getId());
+
+        assertThat(response.status()).isEqualTo(OrderStatus.CANCELLED);
+
+        ArgumentCaptor<OrderCancelledEvent> captor = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+        verify(events).publish(captor.capture());
+        OrderCancelledEvent event = captor.getValue();
+        assertThat(event.type()).isEqualTo(OrderCancelledEvent.TYPE);
+        assertThat(event.orderId()).isEqualTo(order.getId());
+        assertThat(event.aggregateId()).isEqualTo(order.getId());
+        assertThat(event.customerId()).isEqualTo(customer);
+        assertThat(event.occurredAt()).isEqualTo(order.getUpdatedAt());
+    }
+
+    @Test
+    void cancel_alreadyCancelled_throwsAndPublishesNothing() {
+        UUID customer = UUID.randomUUID();
+        Order order = new Order(customer);
+        order.addItem(UUID.randomUUID(), 1, new BigDecimal("39.99"));
+        order.cancel();
+        Instant cancelledAt = order.getUpdatedAt();
+        when(orders.findWithItemsByIdAndCustomerId(order.getId(), customer)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.cancel(customer, order.getId()))
+                .isInstanceOf(InvalidOrderTransitionException.class);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getUpdatedAt()).isEqualTo(cancelledAt);
+        verify(events, never()).publish(any());
     }
 
     @Test
