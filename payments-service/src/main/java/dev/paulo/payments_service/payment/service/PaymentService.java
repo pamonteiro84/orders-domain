@@ -39,6 +39,11 @@ public class PaymentService {
         }
 
         PaymentStatus status = provider.charge(orderId, order.getAmount(), idempotencyKey);
+
+        if (status == PaymentStatus.SUCCEEDED) {
+            order.markPaid();
+        }
+
         Payment payment = new Payment(orderId, customerId, order.getAmount(), status);
 
         return PaymentResponse.from(payments.save(payment));

@@ -83,6 +83,22 @@ class PaymentControllerTest {
     }
 
     @Test
+    void pay_succeeded_marksOrderPaidAndRejectsAnotherKeyWithoutCharging() throws Exception {
+        UUID order = pendingOrder(customer);
+
+        pay(customer, "k1", order).andExpect(status().isCreated());
+
+        assertThat(orderViews.findById(order).orElseThrow().getStatus()).isEqualTo(OrderViewStatus.PAID);
+
+        pay(customer, "k2", order)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Order cannot be paid"));
+
+        assertThat(paymentsOf(order)).isEqualTo(1);
+        verify(provider, times(1)).charge(eq(order), any(), any());
+    }
+
+    @Test
     void pay_withoutIdempotencyKey_returns400() throws Exception {
         UUID order = pendingOrder(customer);
 

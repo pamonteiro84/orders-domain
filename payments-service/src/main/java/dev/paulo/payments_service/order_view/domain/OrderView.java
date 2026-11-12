@@ -58,4 +58,13 @@ public class OrderView {
             status = OrderViewStatus.CANCELLED;
         }
     }
+
+    public void markPaid() {
+
+        if (this.status != OrderViewStatus.PENDING) {
+            throw new IllegalStateException("The order " + orderId + " cannot be paid in status " + status);
+        }
+
+        this.status = OrderViewStatus.PAID;
+    }
 }

@@ -47,10 +47,10 @@ class PaymentServiceTest {
     PaymentService service;
 
     @Test
-    void pay_pendingOrder_chargesAmountFromOrderViewAndSaves() {
+    void pay_pendingOrder_chargesAmountFromOrderViewSavesAndMarksPaid() {
         UUID customerId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        givenOrder(orderId, customerId, OrderViewStatus.PENDING);
+        OrderView order = givenOrder(orderId, customerId, OrderViewStatus.PENDING);
         when(provider.charge(eq(orderId), any(), eq(KEY))).thenReturn(PaymentStatus.SUCCEEDED);
         when(payments.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -64,19 +64,21 @@ class PaymentServiceTest {
         assertThat(saved.getValue().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(response.orderId()).isEqualTo(orderId);
         assertThat(response.amount()).isEqualByComparingTo("119.88");
+        assertThat(order.getStatus()).isEqualTo(OrderViewStatus.PAID);
     }
 
     @Test
-    void pay_providerDeclines_savesFailedPayment() {
+    void pay_providerDeclines_savesFailedPaymentAndKeepsOrderPending() {
         UUID customerId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        givenOrder(orderId, customerId, OrderViewStatus.PENDING);
+        OrderView order = givenOrder(orderId, customerId, OrderViewStatus.PENDING);
         when(provider.charge(eq(orderId), any(), eq(KEY))).thenReturn(PaymentStatus.FAILED);
         when(payments.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PaymentResponse response = service.pay(customerId, orderId, KEY);
 
         assertThat(response.status()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(order.getStatus()).isEqualTo(OrderViewStatus.PENDING);
     }
 
     @Test
@@ -101,8 +103,9 @@ class PaymentServiceTest {
         verify(payments, never()).save(any());
     }
 
-    private void givenOrder(UUID orderId, UUID customerId, OrderViewStatus status) {
-        when(orderViews.findByOrderIdAndCustomerId(orderId, customerId))
-                .thenReturn(Optional.of(new OrderView(orderId, customerId, AMOUNT, status)));
+    private OrderView givenOrder(UUID orderId, UUID customerId, OrderViewStatus status) {
+        OrderView order = new OrderView(orderId, customerId, AMOUNT, status);
+        when(orderViews.findByOrderIdAndCustomerId(orderId, customerId)).thenReturn(Optional.of(order));
+        return order;
     }
 }
