@@ -8,10 +8,11 @@ looks up the real state of the system and answers questions about store policies
 in with a JWT and create, read, list and cancel their own orders against a small product catalog.
 Prices are always taken from the catalog on the server, never from the client. The
 `payments-service` takes payments for those orders through a simulated provider, with safe retries
-backed by Redis. The two services are not connected by events yet.
+backed by Redis. New and cancelled orders reach `payments-service` as Kafka events, published
+through a transactional outbox. Payment results do not flow back to `orders-service` yet.
 
-**Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Redis 7, Flyway,
-Testcontainers, Gradle.
+**Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Redis 7, Apache
+Kafka 4, Flyway, Testcontainers, Gradle.
 
 ## Roadmap
 
@@ -37,8 +38,10 @@ mkdir -p keys
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/private.pem
 openssl pkey -in keys/private.pem -pubout -out keys/public.pem
 
-make run               # starts Postgres and Redis (Docker Compose), orders-service on :8080 and payments-service on :8081
+make run               # starts Postgres, Redis and Kafka (Docker Compose), orders-service on :8080 and payments-service on :8081
 ```
+
+Kafka UI runs on `localhost:8085`, to browse the `orders` topic and its messages.
 
 The keys under each service's `src/test/resources/test-keys/` are used only by the tests.
 
@@ -48,12 +51,12 @@ Other targets:
 |---------------------|---------------------------------------------------------|
 | `make run-orders`   | Starts the infrastructure and only `orders-service`     |
 | `make run-payments` | Starts the infrastructure and only `payments-service`   |
-| `make test`         | Runs all tests (Postgres and Redis via Testcontainers)  |
+| `make test`         | Runs all tests (Postgres, Redis and Kafka via Testcontainers) |
 | `make ci`           | Build, lint/format check and tests, same as CI          |
 | `make format`       | Applies the code formatter (Spotless)                   |
 | `make stop`         | Stops the apps running on :8080 and :8081               |
-| `make db-down`      | Stops Postgres and Redis, keeps the Postgres data       |
-| `make db-reset`     | Stops Postgres and Redis and **deletes** the local data |
+| `make db-down`      | Stops the infrastructure containers, keeps the data     |
+| `make db-reset`     | Stops the infrastructure containers and **deletes** the local data |
 
 Health checks: `curl localhost:8080/actuator/health` and `curl localhost:8081/actuator/health`
 
@@ -157,14 +160,9 @@ curl -i -X POST localhost:8081/payments \
 `FAILED`), `amount` and `createdAt`. The amount is read on the server, never sent by the client. The
 provider is simulated by `FakePaymentProvider`, which currently approves every payment.
 
-`payments-service` reads orders from its own `orders_view` table, which will be filled by events.
-Until then, an order only exists there if the row is inserted by hand; otherwise the request
-returns `404`. Use the order id and the user id returned by the register request:
-
-```bash
-docker compose exec postgres-payments psql -U "$(grep '^ORDERS_DB_USERNAME=' .env | cut -d= -f2)" -d payments \
-  -c "INSERT INTO orders_view (order_id, customer_id, amount, status) VALUES ('{orderId}', '{userId}', 119.88, 'PENDING');"
-```
+`payments-service` reads orders from its own `orders_view` table, filled by the `order.created` and
+`order.cancelled` events. A new order reaches it a moment after it is created; paying before that
+returns `404`, and paying a cancelled order returns `409`.
 
 `Idempotency-Key` is required (up to 255 characters) and is chosen by the client, once per payment
 attempt. It is scoped to the customer in the token:
@@ -216,6 +214,17 @@ and `instance`, plus the data needed to act on it:
 - **Postgres is the final guarantee.** A partial unique index allows one `SUCCEEDED` payment per
   order. If Redis is down, payments continue without a reservation and a duplicate is rejected by
   the index with `409`.
+- **Transactional outbox.** `orders-service` never calls Kafka inside a request. The event is saved
+  to `outbox_events` in the same transaction as the order, so either both are saved or neither is.
+  A scheduled relay publishes pending rows, waits for Kafka's acknowledgement and only then marks
+  them as published; a failed send is retried on the next run.
+- **One topic per aggregate, keyed by order id.** All events of an order go to the `orders` topic
+  with the order id as the key, so they land in the same partition and are consumed in order: a
+  `cancelled` is never applied before its `created`.
+- **Idempotent consumer.** Delivery is at least once, so the same event can arrive twice.
+  `payments-service` records each `eventId` in `processed_events` with `INSERT ... ON CONFLICT DO
+  NOTHING`, in the same transaction as the update to `orders_view`; a duplicate inserts nothing and
+  is skipped.
 - **Flyway owns the schema.** Hibernate runs with `ddl-auto: validate`, so it checks the entities
   against the migrations instead of changing the database.
 - **`Order` is the aggregate root.** Items are only added through `Order.addItem`, which keeps the
@@ -229,7 +238,8 @@ and `instance`, plus the data needed to act on it:
 
 Unit tests cover the domain rules (`Order`) and the services with Mockito. Integration tests run
 the full HTTP → database flow with MockMvc against a real Postgres started by Testcontainers, which
-also starts a real Redis for `payments-service`.
+also starts a real Kafka for both services and a real Redis for `payments-service`. Event tests
+send and read real Kafka messages and wait for the result with Awaitility.
 
 GitHub Actions runs build, lint/format (Spotless, Checkstyle) and tests on every push and pull
 request.
