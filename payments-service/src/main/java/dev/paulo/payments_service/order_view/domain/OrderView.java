@@ -51,4 +51,11 @@ public class OrderView {
     public BigDecimal getAmount() {
         return amount;
     }
+
+    public void cancel() {
+
+        if (this.status == OrderViewStatus.PENDING) {
+            status = OrderViewStatus.CANCELLED;
+        }
+    }
 }
