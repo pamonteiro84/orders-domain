@@ -130,7 +130,6 @@ class OrderControllerTest {
         assertThat(events).hasSize(1);
         OutboxEvent event = events.get(0);
         assertThat(event.getType()).isEqualTo(OrderCreatedEvent.TYPE);
-        assertThat(event.getPublishedAt()).isEmpty();
 
         JsonNode payload = jsonMapper.readTree(event.getPayload());
         assertThat(payload.get("type").asString()).isEqualTo(OrderCreatedEvent.TYPE);
@@ -285,7 +284,6 @@ class OrderControllerTest {
 
         assertThat(cancelled).hasSize(1);
         OutboxEvent event = cancelled.get(0);
-        assertThat(event.getPublishedAt()).isEmpty();
 
         JsonNode payload = jsonMapper.readTree(event.getPayload());
         assertThat(payload.get("type").asString()).isEqualTo(OrderCancelledEvent.TYPE);

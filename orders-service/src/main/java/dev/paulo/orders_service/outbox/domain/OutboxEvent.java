@@ -66,4 +66,13 @@ public class OutboxEvent {
     public Optional<Instant> getPublishedAt() {
         return Optional.ofNullable(publishedAt);
     }
+
+    public void markPublished() {
+
+        if (this.publishedAt != null) {
+            throw new IllegalStateException("Outbox event " + id + " already published");
+        }
+
+        this.publishedAt = Instant.now();
+    }
 }
