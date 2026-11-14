@@ -8,12 +8,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.paulo.payments_service.common.event.EventPublisher;
 import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
 import dev.paulo.payments_service.payment.domain.Payment;
 import dev.paulo.payments_service.payment.domain.PaymentStatus;
 import dev.paulo.payments_service.payment.dto.PaymentResponse;
+import dev.paulo.payments_service.payment.event.PaymentFailedEvent;
+import dev.paulo.payments_service.payment.event.PaymentSucceededEvent;
 import dev.paulo.payments_service.payment.exception.OrderNotFoundException;
 import dev.paulo.payments_service.payment.exception.OrderNotPayableException;
 import dev.paulo.payments_service.payment.provider.PaymentProvider;
@@ -43,6 +46,9 @@ class PaymentServiceTest {
     @Mock
     PaymentProvider provider;
 
+    @Mock
+    EventPublisher events;
+
     @InjectMocks
     PaymentService service;
 
@@ -65,6 +71,13 @@ class PaymentServiceTest {
         assertThat(response.orderId()).isEqualTo(orderId);
         assertThat(response.amount()).isEqualByComparingTo("119.88");
         assertThat(order.getStatus()).isEqualTo(OrderViewStatus.PAID);
+
+        ArgumentCaptor<PaymentSucceededEvent> event = ArgumentCaptor.forClass(PaymentSucceededEvent.class);
+        verify(events).publish(event.capture());
+        assertThat(event.getValue().type()).isEqualTo(PaymentSucceededEvent.TYPE);
+        assertThat(event.getValue().paymentId()).isEqualTo(saved.getValue().getId());
+        assertThat(event.getValue().aggregateId()).isEqualTo(orderId);
+        assertThat(event.getValue().amount()).isEqualByComparingTo("119.88");
     }
 
     @Test
@@ -79,6 +92,11 @@ class PaymentServiceTest {
 
         assertThat(response.status()).isEqualTo(PaymentStatus.FAILED);
         assertThat(order.getStatus()).isEqualTo(OrderViewStatus.PENDING);
+
+        ArgumentCaptor<PaymentFailedEvent> event = ArgumentCaptor.forClass(PaymentFailedEvent.class);
+        verify(events).publish(event.capture());
+        assertThat(event.getValue().type()).isEqualTo(PaymentFailedEvent.TYPE);
+        assertThat(event.getValue().aggregateId()).isEqualTo(orderId);
     }
 
     @Test
@@ -90,6 +108,7 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> service.pay(customerId, orderId, KEY)).isInstanceOf(OrderNotFoundException.class);
         verify(provider, never()).charge(any(), any(), any());
         verify(payments, never()).save(any());
+        verify(events, never()).publish(any());
     }
 
     @Test
@@ -101,6 +120,7 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> service.pay(customerId, orderId, KEY)).isInstanceOf(OrderNotPayableException.class);
         verify(provider, never()).charge(any(), any(), any());
         verify(payments, never()).save(any());
+        verify(events, never()).publish(any());
     }
 
     private OrderView givenOrder(UUID orderId, UUID customerId, OrderViewStatus status) {

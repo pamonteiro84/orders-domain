@@ -1,11 +1,14 @@
 package dev.paulo.payments_service.payment.service;
 
+import dev.paulo.payments_service.common.event.EventPublisher;
 import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
 import dev.paulo.payments_service.payment.domain.Payment;
 import dev.paulo.payments_service.payment.domain.PaymentStatus;
 import dev.paulo.payments_service.payment.dto.PaymentResponse;
+import dev.paulo.payments_service.payment.event.PaymentFailedEvent;
+import dev.paulo.payments_service.payment.event.PaymentSucceededEvent;
 import dev.paulo.payments_service.payment.exception.OrderNotFoundException;
 import dev.paulo.payments_service.payment.exception.OrderNotPayableException;
 import dev.paulo.payments_service.payment.provider.PaymentProvider;
@@ -20,11 +23,17 @@ public class PaymentService {
     private final OrderViewRepository orderViews;
     private final PaymentRepository payments;
     private final PaymentProvider provider;
+    private final EventPublisher events;
 
-    public PaymentService(OrderViewRepository orderViews, PaymentRepository payments, PaymentProvider provider) {
+    public PaymentService(
+            OrderViewRepository orderViews,
+            PaymentRepository payments,
+            PaymentProvider provider,
+            EventPublisher events) {
         this.orderViews = orderViews;
         this.payments = payments;
         this.provider = provider;
+        this.events = events;
     }
 
     @Transactional
@@ -44,8 +53,14 @@ public class PaymentService {
             order.markPaid();
         }
 
-        Payment payment = new Payment(orderId, customerId, order.getAmount(), status);
+        Payment saved = payments.save(new Payment(orderId, customerId, order.getAmount(), status));
 
-        return PaymentResponse.from(payments.save(payment));
+        if (saved.getStatus() == PaymentStatus.SUCCEEDED) {
+            events.publish(PaymentSucceededEvent.from(saved));
+        } else {
+            events.publish(PaymentFailedEvent.from(saved));
+        }
+
+        return PaymentResponse.from(saved);
     }
 }
