@@ -1,6 +1,6 @@
-package dev.paulo.payments_service.event.repository;
+package dev.paulo.payments_service.inbox.repository;
 
-import dev.paulo.payments_service.event.domain.ProcessedEvent;
+import dev.paulo.payments_service.inbox.domain.ProcessedEvent;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;

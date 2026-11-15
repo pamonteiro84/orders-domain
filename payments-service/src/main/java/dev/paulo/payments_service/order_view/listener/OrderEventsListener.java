@@ -1,6 +1,6 @@
 package dev.paulo.payments_service.order_view.listener;
 
-import dev.paulo.payments_service.event.repository.ProcessedEventRepository;
+import dev.paulo.payments_service.inbox.repository.ProcessedEventRepository;
 import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
