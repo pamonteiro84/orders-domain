@@ -16,6 +16,9 @@ spring:
       hibernate.format_sql: true
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
+    consumer:
+      group-id: orders-service
+      auto-offset-reset: earliest
 
 
 jwt:

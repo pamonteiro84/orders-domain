@@ -94,9 +94,18 @@ public class Order {
     public void cancel() {
 
         if (this.status != OrderStatus.PENDING) {
-            throw new InvalidOrderTransitionException(this.id, this.status);
+            throw new InvalidOrderTransitionException(this.id, this.status, OrderStatus.CANCELLED);
         }
         this.status = OrderStatus.CANCELLED;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markPaid() {
+
+        if (this.status != OrderStatus.PENDING) {
+            throw new InvalidOrderTransitionException(this.id, this.status, OrderStatus.PAID);
+        }
+        this.status = OrderStatus.PAID;
         this.updatedAt = Instant.now();
     }
 }
