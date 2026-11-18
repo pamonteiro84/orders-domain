@@ -9,13 +9,17 @@ import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 
 @SpringBootTest
@@ -23,10 +27,14 @@ import org.springframework.kafka.core.KafkaTemplate;
 class OrderEventsListenerTest {
 
     private static final String TOPIC = "orders";
+    private static final String DLT = "orders-dlt";
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Autowired
     private KafkaTemplate<String, String> kafka;
+
+    @Autowired
+    private ConsumerFactory<String, String> consumerFactory;
 
     @Autowired
     private OrderViewRepository orderViews;
@@ -74,6 +82,29 @@ class OrderEventsListenerTest {
         assertThat(processedEvents.existsById(createdId)).isTrue();
     }
 
+    @Test
+    void on_brokenEvent_goesToDltAndKeepsConsuming() throws Exception {
+        UUID brokenId = UUID.randomUUID();
+
+        send(withoutOrderId(brokenId));
+        send(created(UUID.randomUUID()));
+
+        awaitOrderView();
+        assertThat(processedEvents.existsById(brokenId)).isFalse();
+        awaitInDlt(brokenId);
+    }
+
+    private void awaitInDlt(UUID eventId) {
+        try (Consumer<String, String> consumer = consumerFactory.createConsumer("dlt-" + UUID.randomUUID(), null)) {
+            consumer.subscribe(List.of(DLT));
+            List<String> values = new ArrayList<>();
+            await().atMost(TIMEOUT).pollInSameThread().until(() -> {
+                consumer.poll(Duration.ofMillis(500)).forEach(record -> values.add(record.value()));
+                return values.stream().anyMatch(value -> value.contains(eventId.toString()));
+            });
+        }
+    }
+
     private void send(String event) throws Exception {
         kafka.send(TOPIC, orderId.toString(), event).get(10, TimeUnit.SECONDS);
     }
@@ -100,6 +131,13 @@ class OrderEventsListenerTest {
                 {"eventId": "%s", "type": "order.cancelled.v1", "occurredAt": "2026-11-12T10:05:00Z",
                  "orderId": "%s", "customerId": "%s"}
                 """.formatted(eventId, orderId, customerId);
+    }
+
+    private String withoutOrderId(UUID eventId) {
+        return """
+                {"eventId": "%s", "type": "order.created.v1", "occurredAt": "2026-11-12T10:00:00Z",
+                 "customerId": "%s", "amount": 39.99}
+                """.formatted(eventId, customerId);
     }
 
     private String unknownType(UUID eventId) {

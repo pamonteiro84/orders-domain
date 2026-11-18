@@ -8,8 +8,9 @@ looks up the real state of the system and answers questions about store policies
 in with a JWT and create, read, list and cancel their own orders against a small product catalog.
 Prices are always taken from the catalog on the server, never from the client. The
 `payments-service` takes payments for those orders through a simulated provider, with safe retries
-backed by Redis. New and cancelled orders reach `payments-service` as Kafka events, published
-through a transactional outbox. Payment results do not flow back to `orders-service` yet.
+backed by Redis. The two services talk through Kafka events, published through a transactional
+outbox: new and cancelled orders reach `payments-service`, and payment results reach
+`orders-service`, which marks the order as paid.
 
 **Stack:** Java 21, Spring Boot 4, Spring Data JPA (Hibernate), PostgreSQL 16, Redis 7, Apache
 Kafka 4, Flyway, Testcontainers, Gradle.
@@ -41,7 +42,7 @@ openssl pkey -in keys/private.pem -pubout -out keys/public.pem
 make run               # starts Postgres, Redis and Kafka (Docker Compose), orders-service on :8080 and payments-service on :8081
 ```
 
-Kafka UI runs on `localhost:8085`, to browse the `orders` topic and its messages.
+Kafka UI runs on `localhost:8085`, to browse the `orders` and `payments` topics and their messages.
 
 The keys under each service's `src/test/resources/test-keys/` are used only by the tests.
 
@@ -160,6 +161,9 @@ curl -i -X POST localhost:8081/payments \
 `FAILED`), `amount` and `createdAt`. The amount is read on the server, never sent by the client. The
 provider is simulated by `FakePaymentProvider`, which currently approves every payment.
 
+A successful payment reaches `orders-service` as a `payment.succeeded` event, and the order becomes
+`PAID` a moment later. A failed payment leaves the order `PENDING`, so it can be paid again.
+
 `payments-service` reads orders from its own `orders_view` table, filled by the `order.created` and
 `order.cancelled` events. A new order reaches it a moment after it is created; paying before that
 returns `404`, and paying a cancelled order returns `409`.
@@ -214,17 +218,22 @@ and `instance`, plus the data needed to act on it:
 - **Postgres is the final guarantee.** A partial unique index allows one `SUCCEEDED` payment per
   order. If Redis is down, payments continue without a reservation and a duplicate is rejected by
   the index with `409`.
-- **Transactional outbox.** `orders-service` never calls Kafka inside a request. The event is saved
-  to `outbox_events` in the same transaction as the order, so either both are saved or neither is.
-  A scheduled relay publishes pending rows, waits for Kafka's acknowledgement and only then marks
-  them as published; a failed send is retried on the next run.
-- **One topic per aggregate, keyed by order id.** All events of an order go to the `orders` topic
-  with the order id as the key, so they land in the same partition and are consumed in order: a
-  `cancelled` is never applied before its `created`.
-- **Idempotent consumer.** Delivery is at least once, so the same event can arrive twice.
-  `payments-service` records each `eventId` in `processed_events` with `INSERT ... ON CONFLICT DO
-  NOTHING`, in the same transaction as the update to `orders_view`; a duplicate inserts nothing and
-  is skipped.
+- **Transactional outbox.** Neither service calls Kafka inside a request. The event is saved to
+  `outbox_events` in the same transaction as the order or payment, so either both are saved or
+  neither is. A scheduled relay publishes pending rows, waits for Kafka's acknowledgement and only
+  then marks them as published; a failed send is retried on the next run.
+- **One topic per service, keyed by order id.** Order events go to the `orders` topic and payment
+  events to the `payments` topic, both with the order id as the key. All events of an order land in
+  the same partition and are consumed in order: a `cancelled` is never applied before its `created`.
+- **Idempotent consumers.** Delivery is at least once, so the same event can arrive twice. Each
+  service records every `eventId` it consumes in its own `processed_events` table (the inbox) with
+  `INSERT ... ON CONFLICT DO NOTHING`, in the same transaction as the change it applies; a duplicate
+  inserts nothing and is skipped. A payment that arrives for an order that is no longer `PENDING` is
+  recorded and ignored, so it never blocks the consumer.
+- **Retries, then a dead letter topic.** An event that fails is retried twice with a short backoff
+  (1 s, then 2 s), blocking its partition so the events of an order stay in order. If it still
+  fails, or the failure is permanent (a missing field or invalid JSON), it is copied to
+  `<topic>-dlt` and the consumer moves on, so nothing is lost and nothing gets stuck.
 - **Flyway owns the schema.** Hibernate runs with `ddl-auto: validate`, so it checks the entities
   against the migrations instead of changing the database.
 - **`Order` is the aggregate root.** Items are only added through `Order.addItem`, which keeps the
