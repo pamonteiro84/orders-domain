@@ -54,6 +54,7 @@ Other targets:
 | `make run-payments` | Starts the infrastructure and only `payments-service`   |
 | `make test`         | Runs all tests (Postgres, Redis and Kafka via Testcontainers) |
 | `make ci`           | Build, lint/format check and tests, same as CI          |
+| `make lint`         | Only the lint/format check (Spotless, Checkstyle)       |
 | `make format`       | Applies the code formatter (Spotless)                   |
 | `make stop`         | Stops the apps running on :8080 and :8081               |
 | `make db-down`      | Stops the infrastructure containers, keeps the data     |
@@ -201,11 +202,10 @@ and `instance`, plus the data needed to act on it:
 
 ## Design decisions
 
-- **Prices come from the server.** The request only carries `productId` and `quantity`; accepting
-  a price from the client would let anyone set their own price.
-- **The customer comes from the token.** Orders are always filtered by the token's `sub`, never by
-  an id sent by the client, so a customer cannot read or change someone else's orders. Those orders
-  return `404` rather than `403`, which would reveal that they exist.
+- **Never trust the client.** An order request only carries `productId` and `quantity`, and prices
+  come from the catalog, so nobody can set their own price. The customer is always the token's
+  `sub`, never an id sent by the client, so a customer cannot read or change someone else's orders.
+  Those orders return `404` rather than `403`, which would reveal that they exist.
 - **JWT signed with RS256.** The private key signs and the public key only verifies, so
   `payments-service` validates tokens without being able to create them.
 - **One database per service.** `payments-service` never reads the `orders-service` database. It
@@ -237,9 +237,9 @@ and `instance`, plus the data needed to act on it:
 - **Flyway owns the schema.** Hibernate runs with `ddl-auto: validate`, so it checks the entities
   against the migrations instead of changing the database.
 - **`Order` is the aggregate root.** Items are only added through `Order.addItem`, which keeps the
-  total consistent, and status rules live in `Order.cancel()`, not in the controller.
-- **Optimistic locking.** `@Version` on `Order` makes the second of two concurrent updates fail
-  with `409` instead of silently overwriting the first.
+  total consistent, and status rules live in `Order.cancel()` and `Order.markPaid()`, not in the
+  controller or the listener. `@Version` makes the second of two concurrent updates fail with `409`
+  instead of silently overwriting the first.
 - **No N+1 when reading an order.** Items are loaded in the same query with `@EntityGraph`, and
   entities are converted to DTOs inside the transaction (`open-in-view: false`).
 
