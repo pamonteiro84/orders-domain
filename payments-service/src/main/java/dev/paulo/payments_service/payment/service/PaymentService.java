@@ -40,7 +40,7 @@ public class PaymentService {
     public PaymentResponse pay(UUID customerId, UUID orderId, String idempotencyKey) {
 
         OrderView order = orderViews
-                .findByOrderIdAndCustomerId(orderId, customerId)
+                .findForUpdateByOrderIdAndCustomerId(orderId, customerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         if (order.getStatus() != OrderViewStatus.PENDING) {

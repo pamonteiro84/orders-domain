@@ -55,6 +55,8 @@ public class OrderEventsListener {
     }
 
     private void applyCancelled(JsonNode event) {
-        orderViews.findById(UUID.fromString(event.get("orderId").asString())).ifPresent(OrderView::cancel);
+        orderViews
+                .findForUpdateByOrderId(UUID.fromString(event.get("orderId").asString()))
+                .ifPresent(OrderView::cancel);
     }
 }

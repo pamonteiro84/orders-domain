@@ -103,7 +103,8 @@ class PaymentServiceTest {
     void pay_orderNotFoundForCustomer_throwsAndDoesNotCharge() {
         UUID customerId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        when(orderViews.findByOrderIdAndCustomerId(orderId, customerId)).thenReturn(Optional.empty());
+        when(orderViews.findForUpdateByOrderIdAndCustomerId(orderId, customerId))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.pay(customerId, orderId, KEY)).isInstanceOf(OrderNotFoundException.class);
         verify(provider, never()).charge(any(), any(), any());
@@ -125,7 +126,8 @@ class PaymentServiceTest {
 
     private OrderView givenOrder(UUID orderId, UUID customerId, OrderViewStatus status) {
         OrderView order = new OrderView(orderId, customerId, AMOUNT, status);
-        when(orderViews.findByOrderIdAndCustomerId(orderId, customerId)).thenReturn(Optional.of(order));
+        when(orderViews.findForUpdateByOrderIdAndCustomerId(orderId, customerId))
+                .thenReturn(Optional.of(order));
         return order;
     }
 }
