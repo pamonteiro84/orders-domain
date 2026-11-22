@@ -197,6 +197,33 @@ class PaymentControllerTest {
         assertThat(paymentsOf(order)).isEqualTo(1);
     }
 
+    @Test
+    void pay_concurrentRequestsWithDifferentKeys_chargesOnce() throws Exception {
+        UUID order = pendingOrder(customer);
+        CountDownLatch charges = new CountDownLatch(2);
+        CountDownLatch finish = new CountDownLatch(1);
+        doAnswer(invocation -> {
+                    charges.countDown();
+                    finish.await(5, TimeUnit.SECONDS);
+                    return invocation.callRealMethod();
+                })
+                .when(provider)
+                .charge(eq(order), any(), any());
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Integer> first = executor.submit(() -> statusOf(customer, "k1", order));
+            Future<Integer> second = executor.submit(() -> statusOf(customer, "k2", order));
+
+            assertThat(charges.await(2, TimeUnit.SECONDS)).isFalse();
+            finish.countDown();
+
+            assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(201, 409);
+        }
+
+        assertThat(paymentsOf(order)).isEqualTo(1);
+        verify(provider, times(1)).charge(eq(order), any(), any());
+    }
+
     private ResultActions pay(UUID customerId, String key, UUID orderId) throws Exception {
         return mockMvc.perform(request(customerId, orderId).header("Idempotency-Key", key));
     }
