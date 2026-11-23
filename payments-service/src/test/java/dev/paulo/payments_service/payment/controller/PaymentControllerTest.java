@@ -1,6 +1,7 @@
 package dev.paulo.payments_service.payment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,12 +16,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.paulo.payments_service.TestcontainersConfiguration;
+import dev.paulo.payments_service.inbox.repository.ProcessedEventRepository;
 import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
 import dev.paulo.payments_service.payment.provider.PaymentProvider;
 import dev.paulo.payments_service.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +41,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -50,6 +55,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 class PaymentControllerTest {
 
     private static final BigDecimal AMOUNT = new BigDecimal("39.99");
+    private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Autowired
     private MockMvc mockMvc;
@@ -59,6 +65,15 @@ class PaymentControllerTest {
 
     @Autowired
     private PaymentRepository payments;
+
+    @Autowired
+    private ProcessedEventRepository processedEvents;
+
+    @Autowired
+    private KafkaTemplate<String, String> kafka;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @MockitoSpyBean
     private StringRedisTemplate redis;
@@ -195,6 +210,7 @@ class PaymentControllerTest {
 
         assertThat(statuses).containsExactlyInAnyOrder(201, 409);
         assertThat(paymentsOf(order)).isEqualTo(1);
+        verify(provider, times(1)).charge(eq(order), any(), any());
     }
 
     @Test
@@ -222,6 +238,49 @@ class PaymentControllerTest {
 
         assertThat(paymentsOf(order)).isEqualTo(1);
         verify(provider, times(1)).charge(eq(order), any(), any());
+    }
+
+    @Test
+    void pay_orderCancelledWhileCharging_staysPaidAndIgnoresCancel() throws Exception {
+        UUID order = pendingOrder(customer);
+        UUID cancelledEventId = UUID.randomUUID();
+        CountDownLatch charging = new CountDownLatch(1);
+        CountDownLatch finish = new CountDownLatch(1);
+        doAnswer(invocation -> {
+                    charging.countDown();
+                    finish.await(10, TimeUnit.SECONDS);
+                    return invocation.callRealMethod();
+                })
+                .when(provider)
+                .charge(eq(order), any(), any());
+
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<Integer> payment = executor.submit(() -> statusOf(customer, "k1", order));
+            assertThat(charging.await(5, TimeUnit.SECONDS)).isTrue();
+
+            kafka.send("orders", order.toString(), cancelled(cancelledEventId, order))
+                    .get(10, TimeUnit.SECONDS);
+            await().atMost(TIMEOUT).until(this::someoneWaitsForRowLock);
+
+            finish.countDown();
+            assertThat(payment.get()).isEqualTo(201);
+        }
+
+        await().atMost(TIMEOUT).until(() -> processedEvents.existsById(cancelledEventId));
+        assertThat(orderViews.findById(order).orElseThrow().getStatus()).isEqualTo(OrderViewStatus.PAID);
+        assertThat(paymentsOf(order)).isEqualTo(1);
+    }
+
+    private boolean someoneWaitsForRowLock() {
+        Integer waiting = jdbc.queryForObject("select count(*) from pg_locks where not granted", Integer.class);
+        return waiting != null && waiting > 0;
+    }
+
+    private String cancelled(UUID eventId, UUID orderId) {
+        return """
+                {"eventId": "%s", "type": "order.cancelled.v1", "occurredAt": "2026-11-23T10:00:00Z",
+                 "orderId": "%s", "customerId": "%s"}
+                """.formatted(eventId, orderId, customer);
     }
 
     private ResultActions pay(UUID customerId, String key, UUID orderId) throws Exception {

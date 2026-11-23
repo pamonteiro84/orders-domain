@@ -8,6 +8,7 @@ import dev.paulo.payments_service.inbox.repository.ProcessedEventRepository;
 import dev.paulo.payments_service.order_view.domain.OrderView;
 import dev.paulo.payments_service.order_view.domain.OrderViewStatus;
 import dev.paulo.payments_service.order_view.repository.OrderViewRepository;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +65,17 @@ class OrderEventsListenerTest {
         send(cancelled(UUID.randomUUID()));
 
         await().atMost(TIMEOUT).until(this::currentStatus, status -> status == OrderViewStatus.CANCELLED);
+    }
+
+    @Test
+    void on_orderCancelledForPaidOrder_keepsItPaid() throws Exception {
+        UUID cancelledId = UUID.randomUUID();
+        orderViews.save(new OrderView(orderId, customerId, new BigDecimal("39.99"), OrderViewStatus.PAID));
+
+        send(cancelled(cancelledId));
+        await().atMost(TIMEOUT).until(() -> processedEvents.existsById(cancelledId));
+
+        assertThat(currentStatus()).isEqualTo(OrderViewStatus.PAID);
     }
 
     @Test
