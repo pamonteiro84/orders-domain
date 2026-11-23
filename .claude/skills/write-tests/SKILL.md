@@ -29,6 +29,25 @@ is `order`, `product` or the module under test.
   `@AutoConfigureMockMvc` and `@Import(TestcontainersConfiguration.class)`. Use it for status codes,
   JSON, `ProblemDetail` errors and persistence.
 
+## What to cover
+
+Never stop at the happy path. Before writing, read the code under test and list every path through
+it: each `if`, `throw`, `switch` case and early `return`. Write at least one test per path, and check
+each of these that applies:
+
+- **Errors:** every exception and status code the code can produce (`400`, `401`, `404`, `409`,
+  `422`), and that nothing changed afterwards (no row saved, no event published, no charge).
+- **Invalid input:** missing or blank fields, wrong formats, unknown ids, values out of range.
+- **Limits:** empty lists, zero and negative quantities, maximum sizes such as the page cap.
+- **Ownership:** another customer's resource returns `404` and is left untouched.
+- **State rules:** every transition that is not allowed, such as paying a `CANCELLED` order.
+- **Repetition:** the same request or event twice (idempotency keys, duplicate `eventId`).
+- **Concurrency:** two requests or a request and an event at the same time, when the code locks or
+  relies on a unique index.
+- **Events:** the event is published when it should be, and not published when the operation fails.
+
+In the reply, list the cases you covered and any you left out, with the reason.
+
 ## Conventions
 
 - **Naming:** `method_condition_result`, such as `cancel_alreadyCancelled_throws` or
