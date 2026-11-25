@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -111,6 +112,20 @@ class PaymentControllerTest {
 
         assertThat(paymentsOf(order)).isEqualTo(1);
         verify(provider, times(1)).charge(eq(order), any(), any());
+    }
+
+    @Test
+    void pay_cancelledOrder_returns409WithoutChargingAndFreesKey() throws Exception {
+        UUID order = UUID.randomUUID();
+        orderViews.save(new OrderView(order, customer, AMOUNT, OrderViewStatus.CANCELLED));
+
+        pay(customer, "k1", order)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Order cannot be paid"));
+
+        assertThat(paymentsOf(order)).isZero();
+        verify(provider, never()).charge(eq(order), any(), any());
+        assertThat(redis.hasKey(redisKey(customer, "k1"))).isFalse();
     }
 
     @Test

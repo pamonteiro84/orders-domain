@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import dev.paulo.orders_service.TestcontainersConfiguration;
 import dev.paulo.orders_service.order.event.OrderCancelledEvent;
 import dev.paulo.orders_service.order.event.OrderCreatedEvent;
+import dev.paulo.orders_service.order.repository.OrderRepository;
 import dev.paulo.orders_service.outbox.domain.OutboxEvent;
 import dev.paulo.orders_service.outbox.repository.OutboxEventRepository;
 import dev.paulo.orders_service.user.domain.User;
@@ -27,6 +28,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -49,6 +51,12 @@ class OrderControllerTest {
 
     @Autowired
     private JsonMapper jsonMapper;
+
+    @Autowired
+    private OrderRepository orders;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void createOrder_returns201WithLocationAndServerCalculatedTotal() throws Exception {
@@ -268,6 +276,22 @@ class OrderControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.orderId").value(id))
                 .andExpect(jsonPath("$.currentStatus").value("CANCELLED"));
+    }
+
+    @Test
+    void cancelOrder_paid_returns409AndStaysPaid() throws Exception {
+        String customer = newCustomer();
+        String id = createOrderFor(customer);
+        transactionTemplate.executeWithoutResult(
+                status -> orders.findById(UUID.fromString(id)).orElseThrow().markPaid());
+
+        mockMvc.perform(post("/orders/" + id + "/cancel").with(as(customer)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.currentStatus").value("PAID"));
+
+        mockMvc.perform(get("/orders/" + id).with(as(customer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAID"));
     }
 
     @Test

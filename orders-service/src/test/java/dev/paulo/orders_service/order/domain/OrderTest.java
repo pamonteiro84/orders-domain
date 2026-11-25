@@ -49,6 +49,17 @@ class OrderTest {
     }
 
     @Test
+    void cancel_paidOrder_throwsAndStaysPaid() {
+        Order order = new Order(UUID.randomUUID());
+        order.markPaid();
+
+        assertThatThrownBy(order::cancel)
+                .isInstanceOf(InvalidOrderTransitionException.class)
+                .hasMessageContaining("from PAID to CANCELLED");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
     void markPaid_pendingOrder_becomesPaid() {
         Order order = new Order(UUID.randomUUID());
 
